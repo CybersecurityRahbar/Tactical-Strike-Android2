@@ -16,7 +16,7 @@ static func spawn_dust(parent: Node, position: Vector3, normal: Vector3, heavy: 
 	var dust_dot := SphereMesh.new()
 	dust_dot.radius = 0.055 if heavy else 0.035
 	dust_dot.height = dust_dot.radius * 2.0
-	particles.draw_pass_1 = dust_dot
+	particles.mesh = dust_dot
 	parent.add_child(particles)
 	particles.global_position = position + normal.normalized() * 0.04
 	particles.emitting = true

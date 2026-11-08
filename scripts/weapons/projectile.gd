@@ -13,6 +13,7 @@ var ricochet_used := false
 var whiz_played := false
 
 func setup(start_position: Vector3, initial_velocity: Vector3, stats: Dictionary, shooter_node: Node3D, show_tracer: bool) -> void:
+	add_to_group("ballistic_projectiles")
 	global_position = start_position
 	velocity = initial_velocity
 	weapon_stats = stats.duplicate(true)
@@ -23,21 +24,26 @@ func setup(start_position: Vector3, initial_velocity: Vector3, stats: Dictionary
 
 func _create_tracer_visual() -> void:
 	tracer_visual = MeshInstance3D.new()
-	var streak := BoxMesh.new()
+	# A compact luminous projectile core reads as a moving round. The former
+	# multi-metre box rendered as a continuous red laser line on mobile screens.
+	var core := SphereMesh.new()
 	var caliber_factor := 1.0
 	if str(weapon_stats.get("caliber", "")).contains("12.7") or str(weapon_stats.get("caliber", "")).contains(".50"):
-		caliber_factor = 1.8
+		caliber_factor = 1.55
 	elif str(weapon_stats.get("caliber", "")).contains("7.62"):
-		caliber_factor = 1.25
-	streak.size = Vector3(0.014 * caliber_factor, 0.014 * caliber_factor, 2.25 * caliber_factor)
-	tracer_visual.mesh = streak
+		caliber_factor = 1.2
+	core.radius = 0.035 * caliber_factor
+	core.height = 0.085 * caliber_factor
+	core.radial_segments = 8
+	core.rings = 4
+	tracer_visual.mesh = core
 	var material := StandardMaterial3D.new()
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	var tracer_color: Color = weapon_stats.get("tracer_color", Color(1.0, 0.16, 0.045))
-	material.albedo_color = tracer_color
+	var tracer_color: Color = weapon_stats.get("tracer_color", Color(1.0, 0.36, 0.10))
+	material.albedo_color = Color(1.0, 0.72, 0.32)
 	material.emission_enabled = true
 	material.emission = tracer_color
-	material.emission_energy_multiplier = 1.1
+	material.emission_energy_multiplier = 1.8
 	tracer_visual.material_override = material
 	add_child(tracer_visual)
 

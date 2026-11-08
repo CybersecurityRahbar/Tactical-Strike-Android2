@@ -124,7 +124,7 @@ func _create_input_map() -> void:
 	_bind_key("crouch", KEY_C)
 	_bind_key("reload", KEY_R)
 	_bind_key("weapon_next", KEY_Q)
-	_bind_key("toggle_tracer", KEY_T)
+	_bind_key("ammo_cycle", KEY_Y)
 	for i in range(7):
 		_bind_key("weapon_%d" % (i + 1), KEY_1 + i)
 	if not InputMap.has_action("fire"):

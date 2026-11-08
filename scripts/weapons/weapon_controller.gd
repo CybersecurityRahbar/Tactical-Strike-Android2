@@ -26,6 +26,7 @@ var ammo_type_index := 0
 var fire_cooldown := 0.0
 var reload_remaining := 0.0
 var total_shots := 0
+var last_shot_used_tracer := false
 var aim_enabled := false
 var is_reloading := false
 var view_model: Node3D
@@ -34,8 +35,9 @@ var animation_player: AnimationPlayer
 var action_animation_active := false
 var recoil_amount := 0.0
 var aim_blend := 0.0
-var view_model_base := Vector3(0.16, -0.29, -0.66)
-var view_model_ads := Vector3(0.025, -0.22, -0.74)
+var view_model_base := Vector3(0.31, -0.34, -0.58)
+var view_model_ads := Vector3(0.22, -0.25, -0.66)
+var view_model_scale := 0.46
 var sway_time := 0.0
 var movement_state := "idle"
 var last_locomotion_animation := ""
@@ -183,16 +185,34 @@ func _try_fire() -> void:
 	if ammo_name == "AP":
 		shot_spec.damage = float(shot_spec.damage) * 1.12
 		shot_spec.penetration = float(shot_spec.penetration) * 1.42
-	var automatic_tracer := int(spec.tracer_every) > 0 and total_shots % int(spec.tracer_every) == 0
-	var use_tracer := ammo_name == "TRACER" or automatic_tracer
+	# Tracers are an explicit ammunition choice; FMJ/AP must not unexpectedly
+	# turn into bright streaks every few rounds.
+	var use_tracer := ammo_name == "TRACER"
+	last_shot_used_tracer = use_tracer
 	shot_spec["ammo_type"] = ammo_name
 	shot_spec["tracer_color"] = Color(1.0, 0.16, 0.045)
 
-	var forward := -camera.global_transform.basis.z.normalized()
-	var muzzle := camera.global_position + camera.global_transform.basis * Vector3(0.18, -0.19, -1.05)
+	var camera_basis := camera.global_transform.basis.orthonormalized()
+	var camera_origin := camera.global_position
+	var forward := -camera_basis.z
+	var aim_query := PhysicsRayQueryParameters3D.create(
+		camera_origin,
+		camera_origin + forward * float(spec.max_range)
+	)
+	aim_query.collision_mask = 1
+	if is_instance_valid(shooter) and shooter is CollisionObject3D:
+		aim_query.exclude = [shooter.get_rid()]
+	var aim_hit := camera.get_world_3d().direct_space_state.intersect_ray(aim_query)
+	var aim_point: Vector3 = aim_hit.get("position", camera_origin + forward * float(spec.max_range))
+	# Keep the launch point close to the visible weapon and aim from that point
+	# toward the camera's actual center-screen target to reduce near-range parallax.
+	var muzzle := camera_origin + camera_basis * Vector3(0.22, -0.16, -0.48)
+	var shot_direction := (aim_point - muzzle).normalized()
+	if shot_direction.is_zero_approx():
+		shot_direction = forward
 	var projectile := PROJECTILE.new()
 	get_tree().current_scene.add_child(projectile)
-	projectile.setup(muzzle, forward * float(spec.muzzle_velocity), shot_spec, shooter, use_tracer)
+	projectile.setup(muzzle, shot_direction * float(spec.muzzle_velocity), shot_spec, shooter, use_tracer)
 
 	# One recorded report per shot. Procedural legacy gunshot/impact tones are disabled.
 	WEAPON_AUDIO.play_fire(get_tree().current_scene, muzzle, str(spec.audio_profile), -0.8 if not aim_enabled else -1.8)
@@ -222,7 +242,11 @@ func _build_weapon_view_model() -> void:
 		push_error("The imported first-person weapon scene root is not Node3D.")
 		return
 	weapon_scene.name = "AK74M_ArmsAndWeapon"
-	weapon_scene.scale = Vector3.ONE * 0.72
+	# The source is authored with its rifle axis across the screen in the current
+	# camera mount. Rotate the whole rig into the camera-forward axis and reduce
+	# its oversized foreground framing; keep the transform isolated at the root.
+	weapon_scene.rotation_degrees.y = 90.0
+	weapon_scene.scale = Vector3.ONE * view_model_scale
 	view_model.add_child(weapon_scene)
 
 	var players := weapon_scene.find_children("*", "AnimationPlayer", true, false)

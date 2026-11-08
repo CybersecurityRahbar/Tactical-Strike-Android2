@@ -117,7 +117,7 @@ func _build_environment() -> void:
 	sky.sky_material = sky_material
 	environment.sky = sky
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	environment.ambient_light_energy = 0.88
+	environment.ambient_light_energy = 0.62
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	# Soft depth haze preserves distant silhouettes while gently reducing contrast.
 	environment.fog_enabled = true
@@ -168,11 +168,11 @@ func _terrain_height(x: float, z: float) -> float:
 		height -= (1.0 - defender_trench / 3.0) * 1.75
 	return height
 
-func _soil_color(x: float, z: float) -> Color:
+func _soil_color(x: float, z: float, ground_height: float) -> Color:
 	var broad_variation := terrain_noise.get_noise_2d(x * 0.31, z * 0.31)
 	var fine_variation := detail_noise.get_noise_2d(x * 0.85, z * 0.85)
 	var shade := broad_variation * 0.045 + fine_variation * 0.035
-	var ridge_light := clampf((_terrain_height(x, z) + 13.0) / 45.0, 0.0, 1.0) * 0.025
+	var ridge_light := clampf((ground_height + 13.0) / 45.0, 0.0, 1.0) * 0.025
 	if terrain_texture_enabled:
 		# Near-white vertex tint lets the photographed reddish gravel PBR diffuse remain visible.
 		return Color(
@@ -189,40 +189,58 @@ func _soil_color(x: float, z: float) -> Color:
 	)
 
 func _build_terrain() -> void:
-	var tool := SurfaceTool.new()
-	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
-	tool.set_material(earth_material)
 	var half := MAP_SIZE * 0.5
 	var step := MAP_SIZE / float(TERRAIN_DIVISIONS)
 	var uv_scale := 0.18
+	var grid_side := TERRAIN_DIVISIONS + 1
+	var terrain_heights := PackedFloat32Array()
+	var terrain_colors := PackedColorArray()
+	terrain_heights.resize(grid_side * grid_side)
+	terrain_colors.resize(grid_side * grid_side)
+	for iz in range(grid_side):
+		var z := -half + float(iz) * step
+		for ix in range(grid_side):
+			var x := -half + float(ix) * step
+			var sample_index := iz * grid_side + ix
+			var sample_height := _terrain_height(x, z)
+			terrain_heights[sample_index] = sample_height
+			terrain_colors[sample_index] = _soil_color(x, z, sample_height)
+
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	tool.set_material(earth_material)
 	for ix in range(TERRAIN_DIVISIONS):
 		for iz in range(TERRAIN_DIVISIONS):
 			var x0 := -half + float(ix) * step
 			var x1 := x0 + step
 			var z0 := -half + float(iz) * step
 			var z1 := z0 + step
-			var p00 := Vector3(x0, _terrain_height(x0, z0), z0)
-			var p10 := Vector3(x1, _terrain_height(x1, z0), z0)
-			var p01 := Vector3(x0, _terrain_height(x0, z1), z1)
-			var p11 := Vector3(x1, _terrain_height(x1, z1), z1)
+			var i00 := iz * grid_side + ix
+			var i10 := i00 + 1
+			var i01 := i00 + grid_side
+			var i11 := i01 + 1
+			var p00 := Vector3(x0, terrain_heights[i00], z0)
+			var p10 := Vector3(x1, terrain_heights[i10], z0)
+			var p01 := Vector3(x0, terrain_heights[i01], z1)
+			var p11 := Vector3(x1, terrain_heights[i11], z1)
 			# Godot triangle fronts are clockwise. Keep the collision triangles front-facing
 			# from above while flipping the generated normals back toward +Y.
-			tool.set_color(_soil_color(x0, z0))
+			tool.set_color(terrain_colors[i00])
 			tool.set_uv(Vector2(x0 * uv_scale, z0 * uv_scale))
 			tool.add_vertex(p00)
-			tool.set_color(_soil_color(x1, z0))
+			tool.set_color(terrain_colors[i10])
 			tool.set_uv(Vector2(x1 * uv_scale, z0 * uv_scale))
 			tool.add_vertex(p10)
-			tool.set_color(_soil_color(x0, z1))
+			tool.set_color(terrain_colors[i01])
 			tool.set_uv(Vector2(x0 * uv_scale, z1 * uv_scale))
 			tool.add_vertex(p01)
-			tool.set_color(_soil_color(x1, z0))
+			tool.set_color(terrain_colors[i10])
 			tool.set_uv(Vector2(x1 * uv_scale, z0 * uv_scale))
 			tool.add_vertex(p10)
-			tool.set_color(_soil_color(x1, z1))
+			tool.set_color(terrain_colors[i11])
 			tool.set_uv(Vector2(x1 * uv_scale, z1 * uv_scale))
 			tool.add_vertex(p11)
-			tool.set_color(_soil_color(x0, z1))
+			tool.set_color(terrain_colors[i01])
 			tool.set_uv(Vector2(x0 * uv_scale, z1 * uv_scale))
 			tool.add_vertex(p01)
 	tool.index()
@@ -239,18 +257,13 @@ func _build_terrain() -> void:
 	body.collision_layer = 1
 	body.collision_mask = 1
 	var heightmap := HeightMapShape3D.new()
-	heightmap.map_width = TERRAIN_DIVISIONS + 1
-	heightmap.map_depth = TERRAIN_DIVISIONS + 1
-	var height_samples := PackedFloat32Array()
-	height_samples.resize((TERRAIN_DIVISIONS + 1) * (TERRAIN_DIVISIONS + 1))
-	for iz in range(TERRAIN_DIVISIONS + 1):
-		for ix in range(TERRAIN_DIVISIONS + 1):
-			var sample_x := -half + float(ix) * step
-			var sample_z := -half + float(iz) * step
-			var sample_index := iz * (TERRAIN_DIVISIONS + 1) + ix
-			# HeightMapShape3D samples a unit grid; use one uniform scale on all
-			# axes and pre-scale the stored heights back to world units.
-			height_samples[sample_index] = _terrain_height(sample_x, sample_z) / step
+	heightmap.map_width = grid_side
+	heightmap.map_depth = grid_side
+	var height_samples := terrain_heights.duplicate()
+	for i in range(height_samples.size()):
+		# HeightMapShape3D samples a unit grid; use one uniform scale on all
+		# axes and pre-scale the stored heights back to world units.
+		height_samples[i] /= step
 	heightmap.map_data = height_samples
 	var shape := CollisionShape3D.new()
 	shape.name = "HeightmapCollision"

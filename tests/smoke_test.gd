@@ -12,6 +12,7 @@ const REQUIRED_SCRIPTS: Array[String] = [
 	"res://scripts/ui/virtual_joystick.gd",
 	"res://scripts/ui/hud.gd"
 ]
+const IMPACT_FX = preload("res://scripts/effects/impact_fx.gd")
 
 func _count_mesh_instances(node: Node) -> int:
 	var count := 1 if node is MeshInstance3D else 0
@@ -205,8 +206,8 @@ func _run_smoke_test() -> void:
 			quit(1)
 			return
 
-	if InputMap.has_action("fire") == false or InputMap.has_action("reload") == false:
-		push_error("Smoke test failed: fire or reload input action was not registered.")
+	if InputMap.has_action("fire") == false or InputMap.has_action("reload") == false or InputMap.has_action("ammo_cycle") == false:
+		push_error("Smoke test failed: fire, reload or ammunition-cycle input action was not registered.")
 		quit(1)
 		return
 
@@ -221,6 +222,10 @@ func _run_smoke_test() -> void:
 	await process_frame
 	if int(weapon_controller.get("magazine_ammo")) != ammo_before - 1:
 		push_error("Smoke test failed: touching FIRE did not consume one magazine round.")
+		quit(1)
+		return
+	if bool(weapon_controller.get("last_shot_used_tracer")):
+		push_error("Smoke test failed: standard FMJ ammunition should create a non-tracer projectile.")
 		quit(1)
 		return
 
@@ -238,6 +243,17 @@ func _run_smoke_test() -> void:
 		push_error("Smoke test failed: touching AMMO did not activate tracer ammunition.")
 		quit(1)
 		return
+	for frame in range(10):
+		await physics_frame
+	fire_button.emit_signal("button_down")
+	await process_frame
+	await process_frame
+	fire_button.emit_signal("button_up")
+	await process_frame
+	if not bool(weapon_controller.get("last_shot_used_tracer")):
+		push_error("Smoke test failed: selected tracer ammunition did not create a visible tracer projectile.")
+		quit(1)
+		return
 
 	var reload_button := instance.get_node("HUD/Overlay/ReloadButton") as Button
 	reload_button.emit_signal("button_down")
@@ -251,6 +267,14 @@ func _run_smoke_test() -> void:
 		return
 	if weapon_animation.current_animation != "Rig|AK_Reload_full":
 		push_error("Smoke test failed: reload did not start the authored first-person reload animation.")
+		quit(1)
+		return
+
+	IMPACT_FX.spawn_dust(instance, player_node.global_position + Vector3(0.0, 1.0, 0.0), Vector3.UP, false)
+	await process_frame
+	var dust_particles := instance.get_node_or_null("BallisticImpactDust") as CPUParticles3D
+	if dust_particles == null or dust_particles.mesh == null:
+		push_error("Smoke test failed: ballistic impact dust has no valid particle mesh.")
 		quit(1)
 		return
 
