@@ -3,6 +3,7 @@ extends Node3D
 const WEAPON_DATA = preload("res://scripts/weapons/weapon_data.gd")
 const PROJECTILE = preload("res://scripts/weapons/projectile.gd")
 const WEAPON_AUDIO = preload("res://scripts/effects/weapon_audio.gd")
+const BALLISTICS = preload("res://scripts/weapons/ballistics.gd")
 
 const IDLE_ANIM := "Rig|AK_Idle"
 const DRAW_ANIM := "Rig|AK_Draw"
@@ -11,8 +12,7 @@ const RUN_ANIM := "Rig|AK_Run"
 const FIRE_ANIM := "Rig|AK_Shot"
 const RELOAD_ANIM := "Rig|AK_Reload_full"
 
-const AMMO_NAMES: Array[String] = ["FMJ", "TRACER", "AP"]
-const AMMO_RESERVE_START := 120
+const AMMO_RESERVE_START := 150
 
 var camera: Camera3D
 var shooter: Node3D
@@ -23,6 +23,7 @@ var current_index := 0
 var magazine_ammo := 30
 var reserve_ammo := AMMO_RESERVE_START
 var ammo_type_index := 0
+var ammo_names: Array[String] = ["FMJ", "TRACER", "AP"]
 var fire_cooldown := 0.0
 var reload_remaining := 0.0
 var total_shots := 0
@@ -31,16 +32,22 @@ var aim_enabled := false
 var is_reloading := false
 var view_model: Node3D
 var weapon_scene: Node3D
+var muzzle_marker: Marker3D
+var muzzle_flash: Node3D
+var muzzle_flash_timer: Timer
 var animation_player: AnimationPlayer
 var action_animation_active := false
 var recoil_amount := 0.0
+var recoil_side := 0.0
 var aim_blend := 0.0
 var view_model_base := Vector3(0.31, -0.34, -0.58)
-var view_model_ads := Vector3(0.22, -0.25, -0.66)
-var view_model_scale := 0.46
+var view_model_ads := Vector3(0.0, -0.175, -0.44)
 var sway_time := 0.0
 var movement_state := "idle"
 var last_locomotion_animation := ""
+var burst_shots := 0
+var last_shot_time := -10.0
+var look_delta := Vector2.ZERO
 
 func initialize(camera_ref: Camera3D, shooter_ref: Node3D) -> void:
 	camera = camera_ref
@@ -55,8 +62,16 @@ func initialize(camera_ref: Camera3D, shooter_ref: Node3D) -> void:
 		push_error("No authentic animated weapon model was prepared for this build.")
 		return
 	magazine_ammo = int(weapons[0].magazine)
+	_apply_weapon_defaults()
 	_build_weapon_view_model()
 	_update_hud()
+
+func _apply_weapon_defaults() -> void:
+	var spec: Dictionary = weapons[current_index]
+	ammo_names = WEAPON_DATA.ammo_names(spec)
+	ammo_type_index = clampi(ammo_type_index, 0, ammo_names.size() - 1)
+	view_model_base = spec.get("view_hip_position", Vector3(0.31, -0.34, -0.58))
+	view_model_ads = spec.get("view_ads_position", Vector3(0.0, -0.175, -0.44))
 
 func _read_model_manifest() -> void:
 	var path := "res://assets/runtime/weapon_manifest.json"
@@ -89,23 +104,44 @@ func set_movement_state(walking: bool, running: bool) -> void:
 		movement_state = "idle"
 	_play_locomotion_if_ready()
 
+func notify_look(delta: Vector2) -> void:
+	look_delta += delta
+
+func _ammo_name() -> String:
+	if ammo_names.is_empty():
+		return "FMJ"
+	return ammo_names[clampi(ammo_type_index, 0, ammo_names.size() - 1)]
+
 func cycle_ammo_type() -> void:
-	ammo_type_index = (ammo_type_index + 1) % AMMO_NAMES.size()
+	if weapons.is_empty():
+		return
+	ammo_type_index = (ammo_type_index + 1) % ammo_names.size()
 	_update_hud()
 	if hud != null:
-		hud.set_message("AMMUNITION: " + AMMO_NAMES[ammo_type_index])
+		hud.set_message("AMMUNITION: " + _ammo_name())
 
 func _process(delta: float) -> void:
 	fire_cooldown = maxf(0.0, fire_cooldown - delta)
 	recoil_amount = move_toward(recoil_amount, 0.0, delta * 2.7)
+	recoil_side = move_toward(recoil_side, 0.0, delta * 1.9)
 	aim_blend = move_toward(aim_blend, 1.0 if aim_enabled else 0.0, delta * 6.5)
 	sway_time += delta
+	if camera != null and not weapons.is_empty():
+		var spec: Dictionary = weapons[current_index]
+		var hip_fov := float(spec.get("hip_fov", 78.0))
+		var ads_fov := float(spec.get("ads_fov", 34.0))
+		camera.fov = lerpf(camera.fov, lerpf(hip_fov, ads_fov, aim_blend), clampf(delta * 10.0, 0.0, 1.0))
 	if view_model != null:
+		var breathe := Vector3(sin(sway_time * 1.8) * 0.0022, cos(sway_time * 3.6) * 0.0018, 0.0)
+		var bob := Vector3(sin(sway_time * 5.2) * 0.004, absf(sin(sway_time * 5.2)) * 0.004, 0.0)
+		if movement_state == "idle":
+			bob = Vector3.ZERO
+		var look_sway := Vector3(clampf(-look_delta.x * 0.00035, -0.02, 0.02), clampf(look_delta.y * 0.0003, -0.02, 0.02), 0.0)
 		var target_position := view_model_base.lerp(view_model_ads, aim_blend)
-		var sway := Vector3(sin(sway_time * 1.8) * 0.0025, cos(sway_time * 3.6) * 0.0025, 0.0)
-		view_model.position = target_position + sway + Vector3(0.0, recoil_amount * 0.12, recoil_amount)
-		view_model.rotation.x = -recoil_amount * 0.34
-
+		view_model.position = target_position + breathe + bob + look_sway + Vector3(recoil_side * 0.35, recoil_amount * 0.12, recoil_amount)
+		view_model.rotation.x = -recoil_amount * 0.36
+		view_model.rotation.y = recoil_side * 0.10
+		look_delta = look_delta.lerp(Vector2.ZERO, clampf(delta * 9.0, 0.0, 1.0))
 	if is_reloading:
 		reload_remaining = maxf(0.0, reload_remaining - delta)
 		if reload_remaining <= 0.0:
@@ -124,8 +160,14 @@ func _process(delta: float) -> void:
 func select_weapon(index: int) -> void:
 	if index < 0 or index >= weapons.size():
 		return
+	if index == current_index:
+		return
 	current_index = index
-	magazine_ammo = int(weapons[current_index].magazine)
+	_apply_weapon_defaults()
+	# Switching a rifle does not magically refill its magazine; the crate
+	# reload is an explicit action.
+	if magazine_ammo <= 0:
+		reload_weapon()
 	_build_weapon_view_model()
 	_update_hud()
 
@@ -164,6 +206,12 @@ func _finish_reload() -> void:
 	if hud != null:
 		hud.set_message("RELOAD COMPLETE")
 
+func _muzzle_world_position() -> Vector3:
+	if muzzle_marker != null and is_instance_valid(muzzle_marker):
+		return muzzle_marker.global_position
+	var basis := camera.global_transform.basis.orthonormalized()
+	return camera.global_position + basis * Vector3(0.22, -0.16, -0.48)
+
 func _try_fire() -> void:
 	if weapons.is_empty() or is_reloading or fire_cooldown > 0.0:
 		return
@@ -172,53 +220,73 @@ func _try_fire() -> void:
 			hud.set_message("EMPTY MAGAZINE — RELOAD")
 		return
 
-	var spec: Dictionary = weapons[current_index]
-	fire_cooldown = float(spec.fire_interval)
+	var weapon: Dictionary = weapons[current_index]
+	fire_cooldown = float(weapon.fire_interval)
 	magazine_ammo -= 1
 	total_shots += 1
-	recoil_amount = 0.11 if aim_enabled else 0.085
-	if is_instance_valid(shooter) and shooter.has_method("add_weapon_recoil"):
-		shooter.call("add_weapon_recoil", 0.022 if aim_enabled else 0.014)
 
-	var shot_spec := spec.duplicate(true)
-	var ammo_name := AMMO_NAMES[ammo_type_index]
-	if ammo_name == "AP":
-		shot_spec.damage = float(shot_spec.damage) * 1.12
-		shot_spec.penetration = float(shot_spec.penetration) * 1.42
-	# Tracers are an explicit ammunition choice; FMJ/AP must not unexpectedly
-	# turn into bright streaks every few rounds.
-	var use_tracer := ammo_name == "TRACER"
-	last_shot_used_tracer = use_tracer
-	shot_spec["ammo_type"] = ammo_name
-	shot_spec["tracer_color"] = Color(1.0, 0.16, 0.045)
+	var now := Time.get_ticks_msec() * 0.001
+	if now - last_shot_time > 0.30:
+		burst_shots = 0
+	last_shot_time = now
+	burst_shots += 1
+	var burst_factor := 1.0 + minf(float(burst_shots - 1) * 0.16, 1.0)
+
+	var shot_spec := WEAPON_DATA.build_shot_spec(weapon, _ammo_name())
+	last_shot_used_tracer = bool(shot_spec.get("tracer", false))
+	shot_spec["tracer_ignition_distance"] = float(weapon.get("tracer_ignition_distance", 22.0))
+	shot_spec["collision_mask"] = 1
+
+	var recoil_scale := 0.78 if aim_enabled else 1.0
+	var pitch_kick := float(weapon.get("recoil_pitch", 0.019)) * recoil_scale * burst_factor
+	var yaw_kick := float(weapon.get("recoil_yaw", 0.0055)) * randf_range(-1.0, 1.0) * recoil_scale * burst_factor
+	recoil_amount = 0.085 * recoil_scale
+	recoil_side = randf_range(-1.0, 1.0) * 0.5
+	if is_instance_valid(shooter) and shooter.has_method("add_weapon_recoil"):
+		shooter.call("add_weapon_recoil", pitch_kick, yaw_kick)
 
 	var camera_basis := camera.global_transform.basis.orthonormalized()
 	var camera_origin := camera.global_position
 	var forward := -camera_basis.z
-	var aim_query := PhysicsRayQueryParameters3D.create(
-		camera_origin,
-		camera_origin + forward * float(spec.max_range)
-	)
+	# Dispersion is an angular cone around the camera axis; it tightens when
+	# aiming down the sights and opens up during a long burst.
+	var spread_deg := lerpf(float(weapon.get("spread_hip_deg", 0.55)), float(weapon.get("spread_ads_deg", 0.12)), aim_blend) * burst_factor
+	var angle := deg_to_rad(spread_deg) * sqrt(randf())
+	var roll := randf() * TAU
+	var shot_direction := (forward
+		+ camera_basis.x * cos(roll) * tan(angle)
+		+ camera_basis.y * sin(roll) * tan(angle)).normalized()
+
+	var aim_query := PhysicsRayQueryParameters3D.create(camera_origin, camera_origin + shot_direction * float(weapon.get("max_range", 900.0)))
 	aim_query.collision_mask = 1
 	if is_instance_valid(shooter) and shooter is CollisionObject3D:
 		aim_query.exclude = [shooter.get_rid()]
 	var aim_hit := camera.get_world_3d().direct_space_state.intersect_ray(aim_query)
-	var aim_point: Vector3 = aim_hit.get("position", camera_origin + forward * float(spec.max_range))
-	# Keep the launch point close to the visible weapon and aim from that point
-	# toward the camera's actual center-screen target to reduce near-range parallax.
-	var muzzle := camera_origin + camera_basis * Vector3(0.22, -0.16, -0.48)
-	var shot_direction := (aim_point - muzzle).normalized()
-	if shot_direction.is_zero_approx():
-		shot_direction = forward
+	var aim_point: Vector3 = aim_hit.get("position", camera_origin + shot_direction * float(weapon.get("max_range", 900.0)))
+	var muzzle := _muzzle_world_position()
+	var direction := (aim_point - muzzle).normalized()
+	if direction.is_zero_approx():
+		direction = shot_direction
+	# Sights are regulated for `zero_distance`: lift the bore line by the drop
+	# it would accumulate over that distance, mirroring how a rifle is zeroed.
+	var zero_distance := float(weapon.get("zero_distance", 300.0))
+	var ballistic_profile := BALLISTICS.profile(str(shot_spec.caliber_id))
+	ballistic_profile["muzzle_velocity"] = float(shot_spec.muzzle_velocity)
+	if zero_distance > 1.0:
+		var zero_lift := BALLISTICS.drop_at(ballistic_profile, zero_distance) / zero_distance
+		direction = (direction + camera_basis.y * zero_lift).normalized()
 	var projectile := PROJECTILE.new()
 	get_tree().current_scene.add_child(projectile)
-	projectile.setup(muzzle, shot_direction * float(spec.muzzle_velocity), shot_spec, shooter, use_tracer)
+	projectile.setup(muzzle, direction * float(shot_spec.muzzle_velocity), shot_spec, shooter, last_shot_used_tracer)
 
-	# One recorded report per shot. Procedural legacy gunshot/impact tones are disabled.
-	WEAPON_AUDIO.play_fire(get_tree().current_scene, muzzle, str(spec.audio_profile), -0.8 if not aim_enabled else -1.8)
-	if animation_player != null and animation_player.current_animation != FIRE_ANIM:
-		_play_action_animation(FIRE_ANIM)
-	_spawn_muzzle_flash(muzzle)
+	WEAPON_AUDIO.play_fire(get_tree().current_scene, muzzle, str(weapon.audio_profile), -0.8 if not aim_enabled else -2.2)
+	if animation_player != null:
+		if animation_player.current_animation == FIRE_ANIM:
+			# Retrigger the shot pose so rapid fire stays in sync with the muzzle.
+			animation_player.seek(0.0, true)
+		else:
+			_play_action_animation(FIRE_ANIM)
+	_show_muzzle_flash(muzzle, direction)
 	_update_hud()
 
 func _build_weapon_view_model() -> void:
@@ -226,12 +294,17 @@ func _build_weapon_view_model() -> void:
 		return
 	if is_instance_valid(view_model):
 		view_model.queue_free()
+	if is_instance_valid(muzzle_flash):
+		muzzle_flash.queue_free()
+	if is_instance_valid(muzzle_flash_timer):
+		muzzle_flash_timer.queue_free()
 	view_model = Node3D.new()
 	view_model.name = "WeaponViewModel"
 	view_model.position = view_model_base
 	camera.add_child(view_model)
 
-	var key := str(weapons[current_index].model_key)
+	var spec: Dictionary = weapons[current_index]
+	var key := str(spec.model_key)
 	var resource_path := str(model_paths.get(key, ""))
 	var packed := load(resource_path) as PackedScene
 	if packed == null:
@@ -242,12 +315,14 @@ func _build_weapon_view_model() -> void:
 		push_error("The imported first-person weapon scene root is not Node3D.")
 		return
 	weapon_scene.name = "AK74M_ArmsAndWeapon"
-	# The source is authored with its rifle axis across the screen in the current
-	# camera mount. Rotate the whole rig into the camera-forward axis and reduce
-	# its oversized foreground framing; keep the transform isolated at the root.
-	weapon_scene.rotation_degrees.y = 90.0
-	weapon_scene.scale = Vector3.ONE * view_model_scale
+	# The rig is authored with the barrel along +Z, so it is rotated 180 degrees
+	# to face the camera's -Z forward axis. Mount values are authored in
+	# weapon_data.gd so framing changes never require touching this code.
+	weapon_scene.rotation_degrees = spec.get("view_rotation_degrees", Vector3(0.0, 180.0, 0.0))
+	weapon_scene.scale = Vector3.ONE * float(spec.get("view_scale", 0.46))
 	view_model.add_child(weapon_scene)
+	_create_muzzle_marker()
+	_create_muzzle_flash()
 
 	var players := weapon_scene.find_children("*", "AnimationPlayer", true, false)
 	if players.is_empty():
@@ -264,6 +339,66 @@ func _build_weapon_view_model() -> void:
 	_set_animation_loop(RUN_ANIM, true)
 	_play_action_animation(DRAW_ANIM)
 	_update_hud()
+
+func _create_muzzle_marker() -> void:
+	muzzle_marker = Marker3D.new()
+	muzzle_marker.name = "MuzzlePoint"
+	# Barrel tip in the rig's own space, computed from the skinned pose of the
+	# imported glTF (not from the unskinned bind AABB): the rifle mesh spans
+	# z = -0.779 .. +1.978 and the magazine sits at the negative-Z grip end, so
+	# +Z is the muzzle. Mounting the model 180 degrees maps that to camera -Z.
+	muzzle_marker.position = Vector3(-0.10, 0.03, 1.978)
+	weapon_scene.add_child(muzzle_marker)
+
+func _create_muzzle_flash() -> void:
+	muzzle_flash = Node3D.new()
+	muzzle_flash.name = "MuzzleFlash"
+	muzzle_flash.visible = false
+	var flash_material := StandardMaterial3D.new()
+	flash_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	flash_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	flash_material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	flash_material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	flash_material.albedo_color = Color(1.0, 0.72, 0.34, 0.95)
+	flash_material.emission_enabled = true
+	flash_material.emission = Color(1.0, 0.55, 0.18)
+	flash_material.emission_energy_multiplier = 3.2
+	for i in range(3):
+		var petal := MeshInstance3D.new()
+		var quad := QuadMesh.new()
+		var scale_factor := 1.0 - float(i) * 0.22
+		quad.size = Vector2(0.34 * scale_factor, 0.15 * scale_factor)
+		petal.mesh = quad
+		petal.material_override = flash_material
+		petal.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		petal.rotation.z = float(i) * (TAU / 3.0)
+		petal.position.z = -0.02 * float(i)
+		muzzle_flash.add_child(petal)
+	# No dynamic muzzle light: toggling an OmniLight at 600 rpm forces a light
+	# list update every shot and can hitch on mobile. The additive petals plus
+	# the environment glow carry the flash instead.
+	camera.add_child(muzzle_flash)
+	muzzle_flash_timer = Timer.new()
+	muzzle_flash_timer.one_shot = true
+	muzzle_flash_timer.wait_time = 0.055
+	muzzle_flash_timer.timeout.connect(_hide_muzzle_flash)
+	add_child(muzzle_flash_timer)
+
+func _show_muzzle_flash(_world_position: Vector3, direction: Vector3) -> void:
+	if muzzle_flash == null or muzzle_marker == null:
+		return
+	muzzle_flash.global_position = muzzle_marker.global_position
+	var up := Vector3.UP
+	if absf(direction.dot(Vector3.UP)) > 0.98:
+		up = Vector3.RIGHT
+	muzzle_flash.look_at(muzzle_marker.global_position + direction, up)
+	muzzle_flash.visible = true
+	if muzzle_flash_timer != null:
+		muzzle_flash_timer.start()
+
+func _hide_muzzle_flash() -> void:
+	if muzzle_flash != null:
+		muzzle_flash.visible = false
 
 func _set_animation_loop(animation_name: String, enabled: bool) -> void:
 	if not _has_animation(animation_name):
@@ -303,30 +438,6 @@ func _on_animation_finished(animation_name: StringName) -> void:
 		last_locomotion_animation = ""
 		_play_locomotion_if_ready()
 
-func _spawn_muzzle_flash(world_position: Vector3) -> void:
-	var flash := MeshInstance3D.new()
-	flash.name = "BriefMuzzleFlash"
-	var quad := QuadMesh.new()
-	quad.size = Vector2(0.13, 0.07)
-	flash.mesh = quad
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.albedo_color = Color(1.0, 0.64, 0.22, 0.82)
-	material.emission_enabled = true
-	material.emission = Color(1.0, 0.26, 0.055)
-	material.emission_energy_multiplier = 1.2
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	flash.material_override = material
-	get_tree().current_scene.add_child(flash)
-	flash.global_position = world_position
-	flash.look_at(world_position + -camera.global_transform.basis.z, Vector3.UP)
-	var timer := Timer.new()
-	timer.one_shot = true
-	timer.wait_time = 0.045
-	timer.timeout.connect(flash.queue_free)
-	flash.add_child(timer)
-	timer.start()
-
 func _update_hud() -> void:
 	if hud == null or weapons.is_empty():
 		return
@@ -337,6 +448,31 @@ func _update_hud() -> void:
 		magazine_ammo,
 		int(spec.magazine),
 		reserve_ammo,
-		AMMO_NAMES[ammo_type_index],
+		_ammo_name(),
 		"ADS" if aim_enabled else "AUTO"
 	)
+
+# Used by the HUD and the acceptance test: true when the barrel points down
+# the camera forward axis rather than across the screen.
+func muzzle_direction() -> Vector3:
+	if muzzle_marker == null:
+		return Vector3.ZERO
+	# The marker inherits the 180-degree mount, so its +Z axis already points
+	# down the camera's forward (-Z world) direction.
+	return muzzle_marker.global_transform.basis.z.normalized()
+
+func ballistic_report(distance_m: float) -> Dictionary:
+	if weapons.is_empty():
+		return {}
+	var spec := WEAPON_DATA.build_shot_spec(weapons[current_index], _ammo_name())
+	var caliber := BALLISTICS.profile(str(spec.caliber_id))
+	caliber["muzzle_velocity"] = float(spec.muzzle_velocity)
+	var speed := BALLISTICS.speed_at(caliber, distance_m)
+	return {
+		"distance": distance_m,
+		"speed": speed,
+		"energy": BALLISTICS.energy_j(caliber, speed),
+		"time_of_flight": BALLISTICS.time_of_flight(caliber, distance_m),
+		"drop": BALLISTICS.drop_at(caliber, distance_m),
+		"damage": BALLISTICS.damage_at(caliber, speed, float(spec.damage))
+	}

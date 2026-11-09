@@ -9,9 +9,15 @@ const AK_TAKES: Array[String] = [
 	"res://assets/runtime/audio/ak_C_36P.ogg"
 ]
 const AK_BURST_TAKE := "res://assets/runtime/audio/ak_C_36P.ogg"
+
+static func sample_paths() -> Array[String]:
+	return AK_TAKES.duplicate()
+
+# One trigger pull must produce exactly one report. The source takes in the
+# upstream library are multi-shot field recordings (~10 s), so the asset
+# preparation step extracts a single shot from each take before encoding.
 static func play_fire(parent: Node, world_position: Vector3, profile: String, loudness_db := 0.0) -> void:
 	var candidates: Array[String] = AK_TAKES
-	var pitch := 1.0
 	if profile == "ak_burst":
 		candidates = [AK_BURST_TAKE]
 	var path := candidates[randi_range(0, candidates.size() - 1)]
@@ -23,10 +29,12 @@ static func play_fire(parent: Node, world_position: Vector3, profile: String, lo
 	player.name = "RecordedFirearmReport"
 	player.stream = stream
 	player.volume_db = loudness_db
-	player.pitch_scale = pitch * randf_range(0.985, 1.015)
-	player.unit_size = 7.0
-	player.max_distance = 1250.0
+	player.pitch_scale = randf_range(0.985, 1.015)
+	player.unit_size = 16.0
+	player.max_distance = 1800.0
 	player.attenuation_model = AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
+	player.attenuation_filter_cutoff_hz = 5200.0
+	player.attenuation_filter_db = -9.0
 	player.doppler_tracking = AudioStreamPlayer3D.DOPPLER_TRACKING_DISABLED
 	parent.add_child(player)
 	player.global_position = world_position

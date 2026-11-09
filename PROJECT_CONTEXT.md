@@ -431,3 +431,54 @@ Projectile behavior:
 - Local validation on Godot 4.7.2: headless editor import passed; strengthened smoke test passed, including player displacement/floor stability, touch-button firing and reload, FMJ-versus-TRACER selection, and impact dust mesh initialization.
 - **Validation still outstanding:** no successful Android export from this change set is recorded yet, and no screenshot/physical-phone playtest confirms the model's new orientation, muzzle alignment, touch feel, visuals, sound mix, or performance. The weapon uses licensed AK-family recordings as documented; exact AK-74M recordings are not claimed. A measured, visually authored muzzle attachment is still preferable to the temporary camera-relative launch point.
 - This patch does not create tactical AI, multiplayer, final authored battlefield art, material-specific impact audio or a verified commercial-grade experience. Those remain separate milestones and must not be described as complete.
+
+## Ballistics, audio, impacts and battlefield overhaul — 2026-11-09
+
+Scope: this pass deliberately kept the large 700 m map (long-range engagements were requested) and rebuilt the systems that made the map feel empty and the weapon feel wrong.
+
+### Weapon mount and muzzle
+
+- Root cause of the "backwards rifle": the imported rig's skinned pose runs along **+Z** (rifle mesh spans z = -0.779 .. +1.978, magazine at the negative-Z grip end), while the camera looks down **-Z**. The previous +90° yaw therefore presented the rifle across the screen. The mount is now an authored 180° yaw in `weapon_data.gd`, not a hard-coded rotation in the controller.
+- The muzzle marker is placed at the real barrel tip (z = +1.978), computed from the skinned pose of the glTF rather than the unskinned bind-pose AABB (which ends at 0.958 and produced a launch point in the middle of the barrel). `muzzle_direction()` and the smoke test now assert that the barrel axis points down the camera forward axis.
+- The first-person rig still uses the previously accepted 0.46 framing scale; the source rig is about 2.76 model units long, so this is a deliberate visual scale, not a metric one.
+
+### Ballistics
+
+- Research sources for the cartridge figures: Wikipedia "5.45×39mm" (7N6 880-900 m/s, G7 BC 0.168, 7T3/7T3M tracer burn distances), Weaponsystems.net 5.45×39 (900 m/s at the muzzle, ~550 m/s at 400 m), Wideners 5.45 vs 7.62 retained-velocity tables. Values were cross-checked and rounded for gameplay.
+- New `scripts/weapons/ballistics.gd` holds published cartridge data (5.45×39 7N6 900 m/s, G7 BC 0.168; 7.62×39 715 m/s; 5.56×45 948 m/s; 7.62×54R 830 m/s; 12.7×108 860 m/s) and an exponential velocity-retention curve fitted to published retained velocities (5.45 ≈ 550 m/s at 400 m, 7.62×39 ≈ 486 m/s at 274 m).
+- The projectile integrates quadratic drag (`a = -k·v²`) in sub-steps of at most 2 m, plus gravity, so time of flight, drop and impact energy are physically derived: 5.45×39 at 500 m is ≈ 470 m/s, ≈ 3.0 m of drop, ≈ 0.78 s of flight.
+- Damage and penetration now scale with the remaining velocity at the impact point instead of being fixed numbers, so a 40 m hit and a 480 m hit differ measurably.
+- The rifle is zeroed at 300 m (`zero_distance`): the bore line is lifted by the drop accumulated over that distance, exactly like regulated iron sights. A shot at the sentries (~320 m) now lands on the crosshair instead of ~0.9 m low, while 500 m shots still require real hold-over.
+- Ammunition loads are authored per weapon (FMJ / TRACER / AP) with their own velocity, damage and penetration scales; `build_shot_spec()` merges weapon + load + cartridge.
+- Tracers are no longer a long bright box or a moving dot: the round now renders a thin additive streak (≤ 2.1 m, aligned with velocity) that ignites after 22 m, plus a real supersonic crack when a round passes within 7 m of the listener.
+
+### Audio
+
+- Root cause of "one tap plays several shots": the upstream AK takes are **multi-shot burst recordings** (the first take is 9.94 s containing about 10 shots at ~620 rpm). The asset step now detects transients, extracts the **last** shot of each take into a ~0.3-0.65 s single report with its real decay, and encodes that. The smoke test rejects any sample longer than 1.2 s.
+- Weapon reports use a larger 3D unit size, distance attenuation filtering and random pitch, so repeated fire does not sound identical.
+- New `scripts/effects/impact_audio.gd` synthesises and caches impact impulses per surface (dirt, sand, stone, brick, wood, metal, flesh), ricochet whine and supersonic crack, so material-specific impact sound exists without extra downloads.
+
+### Impacts
+
+- `impact_fx.gd` now composes four layers per hit: surface-tinted dust, solid debris/splinters, sparks for stone/brick/metal, and a short-lived smoke puff; amount, speed and lifetime scale with the round's kinetic energy.
+- Impacts farther than 170 m from the player skip sparks/smoke to protect mobile fill rate.
+- Cover pieces carry a `surface` meta and now burst into debris with sound when destroyed; grazing hits on hard cover ricochet with sparks and a whine.
+
+### Battlefield
+
+- One map, three readable regions: a broad walkable plain in the centre, a ridged rocky massif to the east, and a flat-topped plateau with cliff edges to the west, enclosed by ridges at both ends.
+- The four full-width ridge chains that blocked the old 480 m sightline were removed. The plain now has two knee-high rises (≤ 2.6 m) and dry wadis for cover, while the defender line sits on a 9 m knoll so it stays visible from the spawn at ~500 m.
+- Terrain is split into two surfaces: textured soil for walkable ground and a triplanar rock material for cliffs and peaks (triplanar avoids stretched UVs on vertical faces). Ground colour is vertex-tinted by altitude.
+- Rock scatter is generated from a deformed low-poly mesh in three size classes (boulders on slopes, stones in the basin, scree on massifs), plus dry scrub in the plain.
+- Lighting was reworked: warmer low sun with 4-split shadows out to 260 m, a cool sky fill light, procedural sky with a sun disc, height-aware aerial fog, filmic tonemapping, mild contrast/saturation grading and glow for muzzle/tracer highlights.
+
+### Hittable defenders
+
+- The nine decorative capsule silhouettes are now `StaticBody3D` targets with separate body/head hit zones, armour, health, hit flash and flinch, a fall-down death, respawn after 16 s and a HUD message with the hit distance. Three exposed sentries sit at ~320 m so the first engagement is reachable without a long walk.
+- There is still **no AI**: defenders do not move or shoot back. This pass makes long-range ballistics observable, not a complete firefight loop.
+
+### Validation and boundaries
+
+- Local verification: Godot 4.7.2 headless editor import passed, and `tests/smoke_test.gd` passed end to end (terrain surfaces, triplanar rock, muzzle alignment, ballistic decay/drop, single-shot audio length, tracer mesh, surface impact FX and audio, target body/head damage, touch movement, firing, ADS, reload).
+- Not verified: no Android export from this change set, no screenshot or physical-device playtest. Weapon framing/ADS sight alignment, terrain look, sound mix and frame rate on a real phone still need a device check.
+- Not implemented: enemy AI, multiplayer, additional weapon models, magnification/optics, bullet penetration through bodies.

@@ -111,8 +111,11 @@ func set_aim_enabled(enabled: bool) -> void:
 	if weapon_controller != null and weapon_controller.has_method("set_aiming"):
 		weapon_controller.call("set_aiming", aim_enabled)
 
-func add_weapon_recoil(amount: float) -> void:
-	camera_kick = clampf(camera_kick - amount, -0.18, 0.0)
+func add_weapon_recoil(pitch_kick: float, yaw_kick: float = 0.0) -> void:
+	# Positive X rotation lifts the view, so recoil must add to the kick.
+	camera_kick = clampf(camera_kick + pitch_kick, 0.0, 0.24)
+	if absf(yaw_kick) > 0.0001:
+		rotate_y(yaw_kick)
 
 func _create_input_map() -> void:
 	_bind_key("move_forward", KEY_W)
@@ -162,9 +165,15 @@ func _input(event: InputEvent) -> void:
 			_apply_look(event.relative * mobile_look_multiplier)
 
 func _apply_look(relative: Vector2) -> void:
-	rotate_y(-relative.x * mouse_sensitivity)
-	pitch = clampf(pitch - relative.y * mouse_sensitivity, -1.42, 1.42)
+	# Looking through the sights is slower, which is how magnified aiming feels.
+	var sensitivity_scale := 1.0
+	if aim_enabled:
+		sensitivity_scale = 0.62
+	rotate_y(-relative.x * mouse_sensitivity * sensitivity_scale)
+	pitch = clampf(pitch - relative.y * mouse_sensitivity * sensitivity_scale, -1.42, 1.42)
 	camera.rotation.x = pitch + camera_kick
+	if weapon_controller != null and weapon_controller.has_method("notify_look"):
+		weapon_controller.call("notify_look", relative * sensitivity_scale)
 
 func _set_crouch(enabled: bool, delta: float) -> void:
 	if is_crouched != enabled:
@@ -213,11 +222,15 @@ func _physics_process(delta: float) -> void:
 		weapon_controller.call("set_movement_state", moving, sprinting)
 
 func _process(delta: float) -> void:
-	camera_kick = move_toward(camera_kick, 0.0, delta * 1.7)
+	camera_kick = move_toward(camera_kick, 0.0, delta * 2.4)
 	if camera != null:
 		camera.rotation.x = pitch + camera_kick
-		var target_fov := 57.0 if aim_enabled else 78.0
-		camera.fov = lerpf(camera.fov, target_fov, clampf(delta * 9.0, 0.0, 1.0))
+		# The weapon controller owns the zoom while a weapon is equipped; this
+		# fallback keeps ADS working in a build without imported assets.
+		var weapon_list = weapon_controller.get("weapons") if weapon_controller != null else null
+		var weapon_ready: bool = weapon_list is Array and not weapon_list.is_empty()
+		if not weapon_ready:
+			camera.fov = lerpf(camera.fov, 57.0 if aim_enabled else 78.0, clampf(delta * 9.0, 0.0, 1.0))
 
 func _update_camera_motion(delta: float, moving: bool, sprinting: bool) -> void:
 	var base_height := 1.08 if is_crouched else 1.62
