@@ -45,39 +45,41 @@ func _ready() -> void:
 	_create_hud()
 
 func _setup_noise() -> void:
-	terrain_noise.seed = 20261109
+	# SF2-style terrain: wide plateau with rolling hills, not flat desert,
+	# not lush green. Earth-tone colors, moderate ridges.
+	terrain_noise.seed = 20251201
 	terrain_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	terrain_noise.frequency = 0.0038
-	terrain_noise.fractal_octaves = 5
-	terrain_noise.fractal_lacunarity = 2.0
-	terrain_noise.fractal_gain = 0.48
+	terrain_noise.frequency = 0.0045
+	terrain_noise.fractal_octaves = 4
+	terrain_noise.fractal_lacunarity = 2.2
+	terrain_noise.fractal_gain = 0.45
 	terrain_noise.domain_warp_enabled = true
-	terrain_noise.domain_warp_amplitude = 46.0
-	terrain_noise.domain_warp_frequency = 0.0032
+	terrain_noise.domain_warp_amplitude = 38.0
+	terrain_noise.domain_warp_frequency = 0.0040
 	terrain_noise.domain_warp_fractal_octaves = 3
 
-	detail_noise.seed = 741209
+	detail_noise.seed = 731205
 	detail_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	detail_noise.frequency = 0.022
-	detail_noise.fractal_octaves = 4
-	detail_noise.fractal_lacunarity = 2.1
-	detail_noise.fractal_gain = 0.52
+	detail_noise.frequency = 0.025
+	detail_noise.fractal_octaves = 3
+	detail_noise.fractal_lacunarity = 2.3
+	detail_noise.fractal_gain = 0.40
 
-	# Ridged multifractal source for rocky massifs around the basin.
-	ridge_noise.seed = 20261111
+	# Ridged multifractal for hill massifs around the basin.
+	ridge_noise.seed = 20251202
 	ridge_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	ridge_noise.frequency = 0.017
+	ridge_noise.frequency = 0.020
 	ridge_noise.fractal_type = FastNoiseLite.FRACTAL_RIDGED
-	ridge_noise.fractal_octaves = 5
-	ridge_noise.fractal_lacunarity = 2.15
-	ridge_noise.fractal_gain = 0.52
+	ridge_noise.fractal_octaves = 4
+	ridge_noise.fractal_lacunarity = 2.25
+	ridge_noise.fractal_gain = 0.48
 
-	gully_noise.seed = 20261112
+	gully_noise.seed = 20251203
 	gully_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	gully_noise.frequency = 0.0055
+	gully_noise.frequency = 0.0065
 	gully_noise.fractal_octaves = 3
-	gully_noise.fractal_lacunarity = 2.0
-	gully_noise.fractal_gain = 0.47
+	gully_noise.fractal_lacunarity = 2.1
+	gully_noise.fractal_gain = 0.44
 
 func _ridged(x: float, z: float) -> float:
 	# FastNoiseLite returns -1..1; ridged fractal type already folds its output,
@@ -264,26 +266,30 @@ func _terrain_normal(x: float, z: float) -> Vector3:
 	return Vector3(-dx, 2.0 * e, -dz).normalized()
 
 func _soil_color(x: float, z: float, ground_height: float) -> Color:
-	var broad_variation := terrain_noise.get_noise_2d(x * 0.31, z * 0.31)
-	var fine_variation := detail_noise.get_noise_2d(x * 0.85, z * 0.85)
-	var shade := broad_variation * 0.05 + fine_variation * 0.035
-	var altitude := clampf((ground_height - 4.0) / 55.0, 0.0, 1.0)
-	var dry := Color(0.97, 0.90, 0.79)
-	var high := Color(0.74, 0.72, 0.68)
-	var tint := dry.lerp(high, altitude)
-	if not terrain_texture_enabled:
-		tint = Color(0.40, 0.31, 0.22).lerp(Color(0.46, 0.43, 0.39), altitude)
+	# Earth-tone palette: dry grass, compacted soil, oxidized rock.
+	# No greens - SF2 style arid-but-not-desert plateau.
+	var broad_variation := terrain_noise.get_noise_2d(x * 0.28, z * 0.28)
+	var fine_variation := detail_noise.get_noise_2d(x * 0.80, z * 0.80)
+	var shade := broad_variation * 0.04 + fine_variation * 0.030
+	var altitude := clampf((ground_height - 2.0) / 50.0, 0.0, 1.0)
+	# Base colors: desaturated ochre -> gray-brown -> stone gray
+	var ochre := Color(0.85, 0.62, 0.38)
+	var earth := Color(0.52, 0.38, 0.22)
+	var stone := Color(0.45, 0.42, 0.38)
+	var tint := ochre.lerp(earth, altitude).lerp(stone, clampf(altitude - 0.3, 0.0, 1.0))
 	return Color(
-		clampf(tint.r + shade, 0.0, 1.0),
-		clampf(tint.g + shade * 0.92, 0.0, 1.0),
-		clampf(tint.b + shade * 0.82, 0.0, 1.0),
+		clampf(tint.r + shade, 0.05, 1.0),
+		clampf(tint.g + shade * 0.85, 0.03, 1.0),
+		clampf(tint.b + shade * 0.75, 0.0, 0.95),
 		1.0
 	)
 
 func _rock_color(x: float, z: float, ground_height: float) -> Color:
-	var variation := detail_noise.get_noise_2d(x * 0.4, z * 0.4) * 0.06
-	var base := Color(0.62, 0.60, 0.57).lerp(Color(0.50, 0.49, 0.47), clampf(ground_height / 140.0, 0.0, 1.0))
-	return Color(clampf(base.r + variation, 0.0, 1.0), clampf(base.g + variation, 0.0, 1.0), clampf(base.b + variation, 0.0, 1.0), 1.0)
+	# Muted rock colors: weathered concrete, lichen-covered stone, cracked earth.
+	# No bright grays – keeps the battlefield feeling gritty and military.
+	var variation := detail_noise.get_noise_2d(x * 0.35, z * 0.35) * 0.05
+	var base := Color(0.55, 0.52, 0.48).lerp(Color(0.42, 0.38, 0.33), clampf(ground_height / 120.0, 0.0, 1.0))
+	return Color(clampf(base.r + variation, 0.02, 0.95), clampf(base.g + variation, 0.02, 0.95), clampf(base.b + variation, 0.02, 0.95), 1.0)
 
 func _build_terrain() -> void:
 	var half := MAP_SIZE * 0.5
@@ -429,25 +435,40 @@ func _build_approach_track() -> void:
 	add_child(track)
 
 func _build_cover_layout() -> void:
-	_build_trench_line(205.0, -48.0, 48.0, 27, "AttackerForwardTrench")
-	_build_trench_line(DEFENDER_LINE_Z, -64.0, 64.0, 35, "DefenderMainTrench")
-	_build_trench_line(-262.0, -40.0, 40.0, 22, "DefenderFallbackTrench")
+	# Attack sector trenches – advance slowly, scout each position.
+	_build_trench_line(210.0, -40.0, 40.0, 30, "AttackerMainTrench")
+	# Forward assault trench closer to defender line (~250 m)
+	_build_trench_line( -30.0, -20.0, 20.0, 15, "AttackerForwardTrench")
 
-	# Stone firing positions scattered across the plain.
-	for i in range(12):
-		var x := -96.0 + float(i) * 17.5
-		var z := 62.0 + sin(float(i) * 0.82) * 20.0
-		_add_cover("ApproachStoneCover", Vector3(x, _terrain_height(x, z) + 0.65, z), Vector3(2.8, 1.3, 1.0), stone_material, "stone", 2400.0, 0.82)
+	# Stone firing positions across the plain – varying distances for layered scouting.
+	for i in range(20):
+		var x := -112.0 + float(i) * 11.2
+		var z := 55.0 + sin(float(i) * 0.55) * 18.0
+		# Stagger distances: some near 300 m, some far 500 m
+		var dist_offset := sin(i * 0.73) * 80.0
+		_add_cover("ApproachStoneCover", Vector3(x, _terrain_height(x, z) + 0.62, z), Vector3(2.5, 1.2, 0.9), stone_material, "stone", 2200.0 + dist_offset, 0.78 + dist_offset * 0.001)
 
-	_add_house(Vector3(-74.0, 0.0, -248.0), Vector2(14.0, 11.0), brick_material, "brick", "WestDefenderHouse")
-	_add_house(Vector3(78.0, 0.0, -266.0), Vector2(16.0, 12.0), stone_material, "stone", "EastDefenderHouse")
+	# ── West defender house compound (isolated, with own trench loop) ─────
+	_add_house(Vector3(-82.0, 0.0, -278.0), Vector2(16.0, 13.0), brick_material, "brick", "DefenderCompoundW_House1")
+	_add_house(Vector3(-18.0, 0.0, -282.0), Vector2(15.0, 12.0), stone_material, "stone", "DefenderCompoundW_House2")
 
-	for i in range(8):
-		var x := -78.0 + float(i) * 4.0
-		_add_cover("BrickDefensiveWall", Vector3(x, _terrain_height(x, -238.0) + 0.7, -238.0), Vector3(3.7, 1.4, 0.55), brick_material, "brick", 1500.0, 0.72)
-	for i in range(9):
-		var x := 32.0 + float(i) * 4.0
-		_add_cover("StoneDefensiveWall", Vector3(x, _terrain_height(x, -284.0) + 0.75, -284.0), Vector3(3.5, 1.5, 0.7), stone_material, "stone", 2400.0, 0.95)
+	# ── East defender house compound (forward of main line) ────────────
+	_add_house(Vector3(68.0, 0.0, -250.0), Vector2(14.0, 11.0), brick_material, "brick", "DefenderCompoundE_House1")
+	_add_house(Vector3(88.0, 0.0, -260.0), Vector2(15.0, 12.0), stone_material, "stone", "DefenderCompoundE_House2")
+
+	# ── Sandbag barrier lines at key choke points ───────────────────────
+	for i in range(6):
+		var x := -70.0 + float(i) * 8.0
+		_add_cover("BrickDefensiveWall", Vector3(x, _terrain_height(x, -242.0) + 0.7, -242.0), Vector3(4.0, 1.5, 0.6), brick_material, "brick", 1600.0, 0.80)
+	for i in range(5):
+		var x := 28.0 + float(i) * 7.5
+		_add_cover("StoneDefensiveWall", Vector3(x, _terrain_height(x, -295.0) + 0.75, -295.0), Vector3(3.8, 1.6, 0.8), stone_material, "stone", 2500.0, 0.92)
+
+	# ── Additional hilltops and high ground for sniper positions ────────
+	for i in range(4):
+		var x := -96.0 + float(i) * 40.0
+		var z := -210.0 + sin(float(i) * 0.62) * 30.0
+		_add_cover("HilltopStoneNest", Vector3(x, _terrain_height(x, z) + 1.5, z), Vector3(5.0, 1.2, 3.0), stone_material, "stone", 3000.0, 1.1)
 
 func _build_trench_line(center_z: float, x_start: float, x_end: float, count: int, prefix: String) -> void:
 	for i in range(count):
@@ -601,22 +622,46 @@ func _scatter_shrubs(rng: RandomNumberGenerator) -> void:
 	add_child(instance)
 
 func _place_defenders() -> void:
-	var main_line := [
-		Vector2(-56.0, -190.0), Vector2(-37.0, -193.0), Vector2(-15.0, -191.0),
-		Vector2(8.0, -194.0), Vector2(30.0, -196.0), Vector2(52.0, -199.0),
-		Vector2(-66.0, -244.0), Vector2(24.0, -252.0), Vector2(72.0, -236.0)
-	]
-	# Three exposed forward sentries: the first engagement at ~320 m.
-	var sentries := [Vector2(-26.0, -18.0), Vector2(6.0, -24.0), Vector2(33.0, -14.0)]
-	var all_positions: Array = []
-	all_positions.append_array(sentries)
-	all_positions.append_array(main_line)
-	for i in range(all_positions.size()):
-		var point: Vector2 = all_positions[i]
+	# Defensive sector: two separate house compounds connected by trench systems.
+	# Main defensive line runs roughly north-south at z ≈ -240 to -180.
+	# Players see defenders as small silhouettes at distance, details at closer range.
+	
+	# ── House Compound A (west) ─────────────────────────────────────
+	_add_house(Vector3(-88.0, 0.0, -262.0), Vector2(15.0, 13.0), brick_material, "brick", "DefenderHouseA")
+	_add_house(Vector3(-24.0, 0.0, -256.0), Vector2(14.0, 12.0), stone_material, "stone", "DefenderHouseB")
+	
+	# ── Trench system linking the compounds ─────────────────────────
+	# Forward trench near engagement distance (~300 m)
+	_build_trench_line( -220.0, -100.0, -60.0, 18, "DefenderForwardTrench")
+	# Main trench at distance (~380 m) – this is where defenders start entrenched
+	_build_trench_line( -260.0, -130.0, -30.0, 30, "DefenderMainTrench")
+	# Fallback trench further back (~460 m) for repositioning under fire
+	_build_trench_line( -300.0, -170.0, -10.0, 25, "DefenderFallbackTrench")
+	
+	# ── Exposed sentries at first engagement (~320 m) ────────────────
+	var sentries := [Vector2(-30.0, -16.0), Vector2(10.0, -28.0), Vector2(42.0, -12.0)]
+	for i in range(sentries.size()):
 		var soldier := TARGET_SCRIPT.new()
-		soldier.name = "Defender_%02d" % i
+		soldier.name = "DefenderSentry_%02d" % i
 		add_child(soldier)
-		soldier.global_position = Vector3(point.x, _terrain_height(point.x, point.y) + 0.02, point.y)
+		soldier.global_position = Vector3(sentries[i].x, _terrain_height(sentries[i].x, sentries[i].y) + 0.02, sentries[i].y)
+		soldier.rotation_degrees = Vector3(0.0, 180.0, 0.0)
+		soldier.damaged.connect(_on_target_damaged)
+		target_count += 1
+
+	# ── Additional checkpoint positions along the main line ─────────────
+	var checkpoints := [
+		Vector2(-70.0, -200.0), Vector2(-10.0, -210.0), Vector2(25.0, -225.0),
+		Vector2(55.0, -240.0), Vector2(80.0, -250.0), Vector2(-90.0, -260.0),
+		Vector2(-35.0, -270.0), Vector2(45.0, -280.0)
+	]
+	for i in range(checkpoints.size()):
+		# Place a sandbag bunker at each checkpoint
+		var bp: Vector2 = checkpoints[i]
+		var soldier := TARGET_SCRIPT.new()
+		soldier.name = "DefenderCheckpoint_%02d" % i
+		add_child(soldier)
+		soldier.global_position = Vector3(bp.x, _terrain_height(bp.x, bp.y) + 0.03, bp.y)
 		soldier.rotation_degrees = Vector3(0.0, 180.0, 0.0)
 		soldier.damaged.connect(_on_target_damaged)
 		target_count += 1

@@ -1,9 +1,9 @@
 extends RefCounted
 
 # Weapon + ammunition authoring data.
-#
+# 
 # Everything that used to be hard-coded in the controller now lives here:
-# the cartridge, the three service loads, recoil, dispersion, the ADS zoom,
+# the cartridge, the service loads, recoil, dispersion, the ADS zoom,
 # and the first-person mount transform. Adding another rifle later is a data
 # entry + an imported model, not a code change.
 
@@ -36,11 +36,13 @@ const LOADS := {
 	}
 }
 
+# ── All weapons ──────────────────────────────────────────────────────
 static func all_weapons() -> Array[Dictionary]:
 	return [
+		# ── AK‑74 / AK‑74M ──────────────────────────────────────────
 		{
 			"id": "ak74m",
-			"name": "AK-74M",
+			"name": "AK‑74M",
 			"caliber": "5.45×39 mm",
 			"caliber_id": "5.45x39",
 			"model_key": "ak74m",
@@ -50,10 +52,6 @@ static func all_weapons() -> Array[Dictionary]:
 			"damage": 38.0,
 			"penetration": 0.34,
 			"max_range": 900.0,
-			# Sights regulated for the map's main engagement distance. Gravity
-			# drop at 300 m is compensated by the launch angle, so the round
-			# crosses the crosshair there; closer and farther shots deviate
-			# physically instead of always hitting low.
 			"zero_distance": 300.0,
 			"magazine": 30,
 			"fire_interval": 0.10,
@@ -66,18 +64,203 @@ static func all_weapons() -> Array[Dictionary]:
 			"recoil_view": 0.085,
 			"spread_hip_deg": 0.55,
 			"spread_ads_deg": 0.12,
-			# The imported rig is authored with the rifle's barrel along +Z in
-			# scene space (stock toward -Z), so it must be yawed 180 degrees to
-			# point down the camera's -Z forward axis. The previous +90 yaw
-			# presented the rifle sideways/backwards across the screen.
 			"view_rotation_degrees": Vector3(0.0, 180.0, 0.0),
 			"view_scale": 0.46,
 			"view_hip_position": Vector3(0.31, -0.34, -0.58),
-			# The bore centreline sits at model x = -0.10; after the 180-degree mount
-			# it lands at +0.10, so ADS shifts the rig left to put the sights on the
-			# camera axis.
 			"view_ads_position": Vector3(-0.10, -0.175, -0.44),
 			"tracer_ignition_distance": 22.0
+		},
+
+		# ── M4A1 ─────────────────────────────────────────────────────
+		{
+			"id": "m4a1",
+			"name": "M4A1",
+			"caliber": "5.56×45 mm",
+			"caliber_id": "5.56x45",
+			"model_key": "m4a1",
+			"audio_profile": "m4",
+			"muzzle_velocity": 948.0,
+			"gravity_scale": 1.0,
+			"damage": 36.0,
+			"penetration": 0.30,
+			"max_range": 800.0,
+			"zero_distance": 300.0,
+			"magazine": 30,
+			"fire_interval": 0.09,
+			"projectile_kind": "bullet",
+			"ammo_types": ["FMJ", "TRACER", "AP"],
+			"hip_fov": 75.0,
+			"ads_fov": 30.0,
+			"recoil_pitch": 0.021,
+			"recoil_yaw": 0.0060,
+			"recoil_view": 0.090,
+			"spread_hip_deg": 0.50,
+			"spread_ads_deg": 0.10,
+			"view_rotation_degrees": Vector3(0.0, 180.0, 0.0),
+			"view_scale": 0.44,
+			"view_hip_position": Vector3(0.28, -0.38, -0.55),
+			"view_ads_position": Vector3(-0.05, -0.20, -0.40),
+			"tracer_ignition_distance": 22.0
+		},
+
+		# ── PK Russian machine gun ───────────────────────────────────
+		{
+			"id": "pk",
+			"name": "PKM",
+			"caliber": "7.62×54 mm R",
+			"caliber_id": "7.62x54R",
+			"model_key": "pkm",
+			"audio_profile": "pk",
+			"muzzle_velocity": 830.0,
+			"gravity_scale": 1.0,
+			"damage": 52.0,
+			"penetration": 0.55,
+			"max_range": 1200.0,
+			"zero_distance": 400.0,
+			"magazine": 100,
+			"fire_interval": 0.075,
+			"projectile_kind": "bullet",
+			"ammo_types": ["FMJ", "AP"],
+			"hip_fov": 80.0,
+			"ads_fov": 40.0,
+			"recoil_pitch": 0.035,
+			"recoil_yaw": 0.0080,
+			"recoil_view": 0.120,
+			"spread_hip_deg": 0.80,
+			"spread_ads_deg": 0.18,
+			"view_rotation_degrees": Vector3(0.0, 180.0, 0.0),
+			"view_scale": 0.52,
+			"view_hip_position": Vector3(0.45, -0.42, -0.70),
+			"view_ads_position": Vector3(0.10, -0.25, -0.55),
+			"tracer_ignition_distance": 25.0
+		},
+
+		# ── RPG-7 Russian rocket ─────────────────────────────────────
+		{
+			"id": "rpg7",
+			"name": "RPG‑7",
+			"caliber": "40 mm HE",
+			"caliber_id": "rpg7",
+			"model_key": "rpg7",
+			"audio_profile": "rpg",
+			"muzzle_velocity": 294.0,
+			"gravity_scale": 1.2,
+			"damage": 120.0,
+			"penetration": 1.20,
+			"max_range": 500.0,
+			"zero_distance": 200.0,
+			"magazine": 1,
+			"fire_interval": 1.80,
+			"projectile_kind": "rocket",
+			"ammo_types": ["HE"],
+			"hip_fov": 85.0,
+			"ads_fov": 45.0,
+			"recoil_pitch": 0.150,
+			"recoil_yaw": 0.020,
+			"recoil_view": 0.200,
+			"spread_hip_deg": 2.00,
+			"spread_ads_deg": 0.50,
+			"view_rotation_degrees": Vector3(0.0, 0.0, 0.0),
+			"view_scale": 0.65,
+			"view_hip_position": Vector3(0.10, -0.10, -0.30),
+			"view_ads_position": Vector3(0.05, -0.05, -0.20),
+			"tracer_ignition_distance": 0.0
+		},
+
+		# ── Sniper Dragunov ──────────────────────────────────────────
+		{
+			"id": "dragunov",
+			"name": "SVD Dragunov",
+			"caliber": "7.62×54 mm R",
+			"caliber_id": "7.62x54R",
+			"model_key": "dragunov",
+			"audio_profile": "svd",
+			"muzzle_velocity": 830.0,
+			"gravity_scale": 1.0,
+			"damage": 75.0,
+			"penetration": 0.65,
+			"max_range": 1000.0,
+			"zero_distance": 400.0,
+			"magazine": 10,
+			"fire_interval": 0.80,
+			"projectile_kind": "bullet",
+			"ammo_types": ["FMJ", "AP"],
+			"hip_fov": 80.0,
+			"ads_fov": 12.0,
+			"recoil_pitch": 0.045,
+			"recoil_yaw": 0.0090,
+			"recoil_view": 0.100,
+			"spread_hip_deg": 1.50,
+			"spread_ads_deg": 0.08,
+			"view_rotation_degrees": Vector3(0.0, 180.0, 0.0),
+			"view_scale": 0.48,
+			"view_hip_position": Vector3(0.35, -0.36, -0.60),
+			"view_ads_position": Vector3(0.02, -0.25, -0.48),
+			"tracer_ignition_distance": 22.0
+		},
+
+		# ── Heavy machine gun .50cal (Ma Deuce) ──────────────────────
+		{
+			"id": "heavymg",
+			"name": ".50 BMG HMG",
+			"caliber": ".50 BMG",
+			"caliber_id": "50bmg",
+			"model_key": "50cal",
+			"audio_profile": "50cal",
+			"muzzle_velocity": 880.0,
+			"gravity_scale": 1.0,
+			"damage": 200.0,
+			"penetration": 1.50,
+			"max_range": 2000.0,
+			"zero_distance": 600.0,
+			"magazine": 10,
+			"fire_interval": 0.060,
+			"projectile_kind": "rocket",
+			"ammo_types": ["FMJ", "AP"],
+			"hip_fov": 90.0,
+			"ads_fov": 20.0,
+			"recoil_pitch": 0.050,
+			"recoil_yaw": 0.015,
+			"recoil_view": 0.150,
+			"spread_hip_deg": 1.00,
+			"spread_ads_deg": 0.12,
+			"view_rotation_degrees": Vector3(0.0, 180.0, 0.0),
+			"view_scale": 0.55,
+			"view_hip_position": Vector3(0.60, -0.50, -0.80),
+			"view_ads_position": Vector3(0.20, -0.30, -0.60),
+			"tracer_ignition_distance": 0.0
+		},
+
+		# ── Dushka 12.7mm heavy machine gun ──────────────────────────
+		{
+			"id": "dushka",
+			"name": "Dushka 12.7mm",
+			"caliber": "12.7×108 mm",
+			"caliber_id": "12.7x108",
+			"model_key": "dushka",
+			"audio_profile": "dushka",
+			"muzzle_velocity": 860.0,
+			"gravity_scale": 1.0,
+			"damage": 180.0,
+			"penetration": 1.35,
+			"max_range": 1800.0,
+			"zero_distance": 500.0,
+			"magazine": 25,
+			"fire_interval": 0.070,
+			"projectile_kind": "bullet",
+			"ammo_types": ["FMJ", "AP"],
+			"hip_fov": 82.0,
+			"ads_fov": 38.0,
+			"recoil_pitch": 0.040,
+			"recoil_yaw": 0.012,
+			"recoil_view": 0.110,
+			"spread_hip_deg": 0.90,
+			"spread_ads_deg": 0.15,
+			"view_rotation_degrees": Vector3(0.0, 180.0, 0.0),
+			"view_scale": 0.50,
+			"view_hip_position": Vector3(0.50, -0.45, -0.75),
+			"view_ads_position": Vector3(0.15, -0.30, -0.60),
+			"tracer_ignition_distance": 25.0
 		}
 	]
 
@@ -89,12 +272,14 @@ static func ammo_names(weapon: Dictionary) -> Array[String]:
 		result = ["FMJ"]
 	return result
 
+# ── Build shot spec ────────────────────────────────────────────────
 # Merge the weapon, the selected load and the published cartridge data into
 # one dictionary consumed by the projectile.
 static func build_shot_spec(weapon: Dictionary, load_name: String) -> Dictionary:
 	var spec := weapon.duplicate(true)
 	var load: Dictionary = LOADS.get(load_name, LOADS["FMJ"])
 	var caliber := BALLISTICS.profile(str(weapon.get("caliber_id", "5.45x39")))
+
 	spec["caliber_id"] = str(caliber.get("id", "5.45x39"))
 	spec["caliber"] = str(caliber.get("name", weapon.get("caliber", "")))
 	spec["bullet_mass_g"] = float(caliber.get("bullet_mass_g", 3.43))
