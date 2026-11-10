@@ -113,6 +113,14 @@ jobs:
           test -s assets/runtime/audio/sand_l.ogg
           test -s assets/runtime/audio/sand_r.ogg
           test -s assets/runtime/terrain/rocky_gravel_diff_1k.jpg
+          test -s assets/audio/weapons/ak_01.ogg
+          test -s assets/audio/weapons/pkm_01.ogg
+          test -s assets/audio/weapons/svd_01.ogg
+          test -s assets/audio/weapons/50cal_01.ogg
+          test -s assets/audio/weapons/rpg_launch.ogg
+          test -s assets/audio/weapons/impact_flesh.ogg
+          test -s assets/runtime/materials/brick_color.jpg
+          test -s assets/runtime/materials/wood_color.jpg
 
       - name: Validate APK archive, signature and ARM64 payload
         run: |

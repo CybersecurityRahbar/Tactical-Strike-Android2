@@ -148,15 +148,42 @@ func _create_materials() -> void:
 	rock_material.roughness = 0.92
 
 	sandbag_material = _make_material(Color(0.50, 0.46, 0.33))
-	brick_material = _make_material(Color(0.56, 0.42, 0.32))
-	stone_material = _make_material(Color(0.56, 0.54, 0.48))
+	brick_material = _make_material(Color(0.80, 0.70, 0.62))
+	stone_material = _make_material(Color(0.80, 0.78, 0.72))
 	dark_material = _make_material(Color(0.13, 0.13, 0.12))
 	shrub_material = _make_material(Color(0.20, 0.27, 0.14))
-	wood_material = _make_material(Color(0.32, 0.22, 0.13))
-	metal_material = _make_material(Color(0.28, 0.28, 0.27), 0.55)
+	wood_material = _make_material(Color(0.72, 0.62, 0.52))
+	metal_material = _make_material(Color(0.70, 0.68, 0.64), 0.55)
 	metal_material.metallic = 0.45
-	road_material = _make_material(Color(0.40, 0.33, 0.23))
+	road_material = _make_material(Color(0.66, 0.60, 0.50))
 	leaf_material = _make_material(Color(0.19, 0.27, 0.13))
+	# Photographed CC0 material sets give the village real surface detail:
+	# brick courses, painted plaster, weathered planks and corrugated steel.
+	_apply_pbr(brick_material, "brick", 0.55)
+	_apply_pbr(stone_material, "concrete", 0.42)
+	_apply_pbr(wood_material, "wood", 0.70)
+	_apply_pbr(metal_material, "metal", 0.50)
+	_apply_pbr(road_material, "concrete", 0.30)
+
+# Triplanar PBR so box-mapped walls keep a constant texel density.
+func _apply_pbr(material: StandardMaterial3D, set_name: String, scale: float) -> void:
+	var base := "res://assets/runtime/materials/%s_" % set_name
+	var color_path := base + "color.jpg"
+	if not ResourceLoader.exists(color_path):
+		return
+	material.albedo_texture = load(color_path) as Texture2D
+	material.uv1_triplanar = true
+	material.uv1_scale = Vector3(scale, scale, scale)
+	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	var normal_path := base + "normal.jpg"
+	if ResourceLoader.exists(normal_path):
+		material.normal_enabled = true
+		material.normal_texture = load(normal_path) as Texture2D
+		material.normal_scale = 0.85
+	var roughness_path := base + "roughness.jpg"
+	if ResourceLoader.exists(roughness_path):
+		material.roughness_texture = load(roughness_path) as Texture2D
+		material.roughness = 1.0
 
 func _make_material(color: Color, roughness := 1.0) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()

@@ -77,16 +77,21 @@ func _run() -> void:
 		var profile := str(spec.get("audio_profile", "ak"))
 		if not profiles_seen.has(profile):
 			profiles_seen[profile] = true
+			# Every weapon must have real recorded reports on disk.
+			var recorded: Array = WEAPON_AUDIO.sample_streams(profile)
+			if recorded.is_empty():
+				_fail("profile '%s' has no recorded gunfire samples." % profile)
+				return
 			WEAPON_AUDIO.play_fire(instance, camera.global_position, profile, -6.0)
 			await process_frame
 			var found := false
 			for node in instance.find_children("*", "AudioStreamPlayer3D", true, false):
 				var stream_player := node as AudioStreamPlayer3D
-				if stream_player.stream is AudioStreamWAV:
+				if stream_player.stream != null:
 					found = true
 					break
 			if not found:
-				_fail("profile '%s' produced no synthesised report." % profile)
+				_fail("profile '%s' produced no report at all." % profile)
 				return
 		checked += 1
 

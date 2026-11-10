@@ -160,6 +160,28 @@ static func _build_crack(seed_value: int, pitch: float) -> AudioStreamWAV:
 		samples[i] = (snap * 0.75 + ring + band * exp(-t * 60.0) * 0.3)
 	return _to_stream(samples)
 
+# Recorded impacts for the surfaces we have real takes for (dirt, flesh).
+const SAMPLE_DIR := "res://assets/audio/weapons"
+static var _sample_cache: Dictionary = {}
+
+static func _recorded(key: String, names: Array) -> Array:
+	if _sample_cache.has(key):
+		return _sample_cache[key]
+	var found: Array = []
+	for sample_name in names:
+		var stream := load("%s/%s.ogg" % [SAMPLE_DIR, str(sample_name)]) as AudioStream
+		if stream != null:
+			found.append(stream)
+	_sample_cache[key] = found
+	return found
+
+static func _play_recorded(parent: Node, world_position: Vector3, key: String, names: Array, volume_db: float, unit_size: float, max_distance: float) -> bool:
+	var list := _recorded(key, names)
+	if list.is_empty():
+		return false
+	_play(parent, world_position, list[randi() % list.size()], volume_db, unit_size, max_distance)
+	return true
+
 static func _cached(key: String) -> AudioStreamWAV:
 	return _cache.get(key) as AudioStreamWAV
 
@@ -194,6 +216,14 @@ static func _play(parent: Node, world_position: Vector3, stream: AudioStream, vo
 
 static func play_impact(parent: Node, world_position: Vector3, surface: String, energy_j: float, caliber: Dictionary) -> void:
 	var power := clampf(energy_j / 1500.0, 0.12, 1.5)
+	var volume := linear_to_db(clampf(power * 0.9, 0.08, 1.0)) - 2.0
+	var unit := clampf(3.5 + float(caliber.get("penetration", 0.34)) * 5.0, 4.0, 10.0)
+	# Real takes first: dirt thud and a body hit are the two the player hears
+	# most, and recordings beat any synthesised impulse.
+	if surface == "flesh" and _play_recorded(parent, world_position, "flesh", ["impact_flesh"], volume + 2.0, unit, 420.0):
+		return
+	if (surface == "sand" or surface == "dirt" or surface == "grass") and _play_recorded(parent, world_position, "dirt", ["impact_dirt"], volume, unit, 420.0):
+		return
 	var stream: AudioStreamWAV
 	match surface:
 		"stone", "concrete":
@@ -210,8 +240,6 @@ static func play_impact(parent: Node, world_position: Vector3, surface: String, 
 			stream = _variants("dirt", func(s): return _build_dirt(s, power * 0.9))
 		_:
 			stream = _variants("dirt", func(s): return _build_dirt(s, power))
-	var volume := linear_to_db(clampf(power * 0.9, 0.08, 1.0)) - 2.0
-	var unit := clampf(3.5 + float(caliber.get("penetration", 0.34)) * 5.0, 4.0, 10.0)
 	_play(parent, world_position, stream, volume, unit, 420.0)
 
 static func play_ricochet(parent: Node, world_position: Vector3, caliber: Dictionary) -> void:

@@ -19,6 +19,19 @@ extends RefCounted
 const MIX_RATE := 22050
 const VARIANTS := 2
 
+# Real, recorded gunfire. These are licensed recordings (see
+# THIRD_PARTY_ASSETS.md) cut to single reports with an outdoor tail, so a
+# Kalashnikov actually sounds like a Kalashnikov and a 5.56 rifle sounds like a
+# 5.56 rifle. Synthesis below stays as the fallback for any profile whose
+# recordings are missing.
+const SAMPLE_DIR := "res://assets/audio/weapons"
+const SAMPLE_PREFIX := {
+	"ak": "ak", "ak_burst": "ak", "m4": "m4", "pk": "pkm", "svd": "svd",
+	"50cal": "50cal", "dushka": "dushka", "rpg": "rpg_launch"
+}
+const SAMPLE_COUNT := {"ak": 5, "m4": 5, "pkm": 6, "svd": 5, "50cal": 4, "dushka": 3}
+static var _samples: Dictionary = {}
+
 # body_hz      - muzzle blast fundamental.
 # body_decay   - how fast the blast pressure wave dies (higher = tighter).
 # crack        - supersonic transient level.
@@ -205,10 +218,36 @@ static func _stream_for(profile: String) -> AudioStreamWAV:
 	_cache[cache_key] = stream
 	return stream
 
+# Recorded reports for a profile, or an empty array when the pack is absent.
+static func sample_streams(profile: String) -> Array:
+	var prefix := str(SAMPLE_PREFIX.get(profile, ""))
+	if prefix.is_empty():
+		return []
+	if _samples.has(prefix):
+		return _samples[prefix]
+	var found: Array = []
+	var count := int(SAMPLE_COUNT.get(prefix, 0))
+	if count > 0:
+		for i in range(1, count + 1):
+			var stream := load("%s/%s_%02d.ogg" % [SAMPLE_DIR, prefix, i]) as AudioStream
+			if stream != null:
+				found.append(stream)
+	else:
+		var single := load("%s/%s.ogg" % [SAMPLE_DIR, prefix]) as AudioStream
+		if single != null:
+			found.append(single)
+	_samples[prefix] = found
+	return found
+
 static func play_fire(parent: Node, world_position: Vector3, profile: String, loudness_db := 0.0) -> void:
 	if parent == null or not is_instance_valid(parent) or not parent.is_inside_tree():
 		return
-	var stream := _stream_for(profile)
+	var real := sample_streams(profile)
+	var stream: AudioStream = null
+	if not real.is_empty():
+		stream = real[randi() % real.size()]
+	else:
+		stream = _stream_for(profile)
 	if stream == null:
 		return
 	var settings: Dictionary = PROFILES.get(profile, PROFILES["ak"])
