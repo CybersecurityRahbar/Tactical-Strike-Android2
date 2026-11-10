@@ -25,7 +25,7 @@ var aim_enabled := false
 const JOYSTICK_SCRIPT = preload("res://scripts/ui/virtual_joystick.gd")
 
 # Only meshes imported and verified by the asset pipeline appear in this first playable loadout.
-const WEAPON_NAMES: Array[String] = ["AK-74M"]
+const WEAPON_NAMES: Array[String] = ["AK-74M", "M4A1", "PKM", "RPG-7", "SVD DRAGUNOV", ".50 BMG HMG", "DUSHKA 12.7mm"]
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS

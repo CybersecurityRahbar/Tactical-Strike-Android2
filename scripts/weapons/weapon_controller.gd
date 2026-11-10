@@ -32,6 +32,8 @@ var aim_enabled := false
 var is_reloading := false
 var view_model: Node3D
 var weapon_scene: Node3D
+var weapon_magazines: Array[int] = []
+var weapon_reserves: Array[int] = []
 var muzzle_marker: Marker3D
 var muzzle_flash: Node3D
 var muzzle_flash_timer: Timer
@@ -53,18 +55,27 @@ func initialize(camera_ref: Camera3D, shooter_ref: Node3D) -> void:
 	camera = camera_ref
 	shooter = shooter_ref
 	_read_model_manifest()
-	var all_weapons: Array[Dictionary] = WEAPON_DATA.all_weapons()
-	for spec in all_weapons:
-		var model_key := str(spec.get("model_key", ""))
-		if model_paths.has(model_key) and ResourceLoader.exists(str(model_paths[model_key])):
-			weapons.append(spec)
+	# Every authored weapon joins the loadout. A weapon whose imported rig is
+	# missing gets a procedural stand-in so the whole arsenal stays playable
+	# even when the external asset download did not run.
+	weapons = WEAPON_DATA.all_weapons()
 	if weapons.is_empty():
-		push_error("No authentic animated weapon model was prepared for this build.")
+		push_error("Weapon data is empty; nothing to equip.")
 		return
-	magazine_ammo = int(weapons[0].magazine)
+	_ready_weapon_ammo()
+	magazine_ammo = weapon_magazines[0]
+	reserve_ammo = weapon_reserves[0]
 	_apply_weapon_defaults()
 	_build_weapon_view_model()
 	_update_hud()
+
+func _ready_weapon_ammo() -> void:
+	weapon_magazines.clear()
+	weapon_reserves.clear()
+	for spec in weapons:
+		var capacity := int(spec.get("magazine", 30))
+		weapon_magazines.append(capacity)
+		weapon_reserves.append(int(spec.get("reserve_ammo", AMMO_RESERVE_START)))
 
 func _apply_weapon_defaults() -> void:
 	var spec: Dictionary = weapons[current_index]
@@ -162,7 +173,12 @@ func select_weapon(index: int) -> void:
 		return
 	if index == current_index:
 		return
+	if not weapon_magazines.is_empty():
+		weapon_magazines[current_index] = magazine_ammo
+		weapon_reserves[current_index] = reserve_ammo
 	current_index = index
+	magazine_ammo = weapon_magazines[index]
+	reserve_ammo = weapon_reserves[index]
 	_apply_weapon_defaults()
 	# Switching a rifle does not magically refill its magazine; the crate
 	# reload is an explicit action.
@@ -302,13 +318,20 @@ func _build_weapon_view_model() -> void:
 	view_model.name = "WeaponViewModel"
 	view_model.position = view_model_base
 	camera.add_child(view_model)
+	animation_player = null
+	last_locomotion_animation = ""
+	action_animation_active = false
 
 	var spec: Dictionary = weapons[current_index]
 	var key := str(spec.model_key)
 	var resource_path := str(model_paths.get(key, ""))
-	var packed := load(resource_path) as PackedScene
+	var packed: PackedScene = null
+	if resource_path != "" and ResourceLoader.exists(resource_path):
+		packed = load(resource_path) as PackedScene
 	if packed == null:
-		push_error("Could not load animated first-person weapon scene: " + resource_path)
+		# No imported rig for this weapon: build a stand-in silhouette so the
+		# weapon is still visible, aimable and fully playable.
+		_build_procedural_view_model(spec)
 		return
 	weapon_scene = packed.instantiate() as Node3D
 	if weapon_scene == null:
@@ -340,14 +363,107 @@ func _build_weapon_view_model() -> void:
 	_play_action_animation(DRAW_ANIM)
 	_update_hud()
 
-func _create_muzzle_marker() -> void:
+# Silhouette dimensions for weapons that have no imported rig. Values are in
+# the rig's own space where +Z points down the bore (the mount transform then
+# turns that towards the camera's -Z forward axis).
+const PROC_GEOMETRY := {
+	"ak74m": {"barrel": 1.00, "radius": 0.020, "optic": 0.0, "tube": 0.0, "wood": true},
+	"m4a1": {"barrel": 0.90, "radius": 0.018, "optic": 0.0, "tube": 0.0, "wood": false},
+	"pkm": {"barrel": 1.12, "radius": 0.024, "optic": 0.0, "tube": 0.0, "wood": true},
+	"rpg7": {"barrel": 1.25, "radius": 0.042, "optic": 0.12, "tube": 0.075, "wood": true},
+	"dragunov": {"barrel": 1.22, "radius": 0.020, "optic": 0.20, "tube": 0.0, "wood": true},
+	"50cal": {"barrel": 1.40, "radius": 0.032, "optic": 0.22, "tube": 0.0, "wood": false},
+	"dushka": {"barrel": 1.32, "radius": 0.034, "optic": 0.16, "tube": 0.0, "wood": false},
+}
+
+func _build_procedural_view_model(spec: Dictionary) -> void:
+	if view_model == null:
+		return
+	var wid := str(spec.get("id", ""))
+	var geometry: Dictionary = PROC_GEOMETRY.get(wid, {"barrel": 1.0, "radius": 0.020, "optic": 0.0, "tube": 0.0, "wood": false})
+	weapon_scene = Node3D.new()
+	weapon_scene.name = wid + "_Procedural"
+	weapon_scene.rotation_degrees = spec.get("view_rotation_degrees", Vector3(0.0, 180.0, 0.0))
+	weapon_scene.scale = Vector3.ONE * float(spec.get("view_scale", 0.46))
+	view_model.add_child(weapon_scene)
+
+	var metal := _proc_material(Color(0.14, 0.145, 0.155), 0.70, 0.38)
+	var furniture := _proc_material(Color(0.33, 0.22, 0.12) if bool(geometry.get("wood", false)) else Color(0.10, 0.10, 0.11), 0.15, 0.72)
+
+	var barrel_len := float(geometry.get("barrel", 1.0))
+	var radius := float(geometry.get("radius", 0.020))
+	var tube_radius := float(geometry.get("tube", 0.0))
+
+	if tube_radius > 0.0:
+		# Launcher: one fat tube with a cone warhead at the muzzle end.
+		_add_proc_cylinder(weapon_scene, tube_radius, barrel_len * 1.05, Vector3(0.0, 0.0, barrel_len * 0.45), metal)
+		var cone := CylinderMesh.new()
+		cone.top_radius = 0.0
+		cone.bottom_radius = tube_radius * 1.25
+		cone.height = 0.24
+		var cone_instance := MeshInstance3D.new()
+		cone_instance.mesh = cone
+		cone_instance.material_override = _proc_material(Color(0.30, 0.28, 0.20), 0.4, 0.5)
+		cone_instance.position = Vector3(0.0, 0.0, barrel_len * 1.02)
+		cone_instance.rotation_degrees = Vector3(90.0, 0.0, 0.0)
+		cone_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		weapon_scene.add_child(cone_instance)
+		_add_proc_box(weapon_scene, Vector3(0.05, 0.14, 0.06), Vector3(0.0, -0.10, 0.06), furniture)
+	else:
+		_add_proc_cylinder(weapon_scene, radius, barrel_len * 0.9, Vector3(0.0, 0.03, barrel_len * 0.45), metal)
+		_add_proc_box(weapon_scene, Vector3(0.086, 0.118, 0.56), Vector3(0.0, 0.0, 0.02), furniture)
+		_add_proc_box(weapon_scene, Vector3(0.055, 0.095, 0.30), Vector3(0.0, -0.004, -0.40), furniture)
+		_add_proc_box(weapon_scene, Vector3(0.052, 0.215, 0.10), Vector3(0.0, -0.145, 0.06), metal)
+		_add_proc_box(weapon_scene, Vector3(0.045, 0.14, 0.06), Vector3(0.0, -0.125, -0.12), furniture)
+		_add_proc_box(weapon_scene, Vector3(0.048, 0.032, 0.22), Vector3(0.0, 0.072, 0.30), furniture)
+
+	var optic_height := float(geometry.get("optic", 0.0))
+	if optic_height > 0.0:
+		_add_proc_cylinder(weapon_scene, 0.034, 0.30, Vector3(0.0, 0.085 + optic_height * 0.4, 0.08), metal)
+		_add_proc_box(weapon_scene, Vector3(0.048, optic_height * 0.55, 0.16), Vector3(0.0, 0.07 + optic_height * 0.22, 0.08), metal)
+
+	_create_muzzle_marker(Vector3(0.0, 0.03, barrel_len * (1.06 if tube_radius > 0.0 else 0.9)))
+	_create_muzzle_flash()
+	_update_hud()
+
+func _proc_material(color: Color, metallic: float, roughness: float) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.metallic = metallic
+	material.roughness = roughness
+	return material
+
+func _add_proc_box(parent: Node3D, size: Vector3, at: Vector3, material: Material) -> void:
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	var instance := MeshInstance3D.new()
+	instance.mesh = mesh
+	instance.material_override = material
+	instance.position = at
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(instance)
+
+func _add_proc_cylinder(parent: Node3D, cylinder_radius: float, length: float, at: Vector3, material: Material) -> void:
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = cylinder_radius
+	mesh.bottom_radius = cylinder_radius
+	mesh.height = length
+	var instance := MeshInstance3D.new()
+	instance.mesh = mesh
+	instance.material_override = material
+	instance.position = at
+	instance.rotation_degrees = Vector3(90.0, 0.0, 0.0)
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(instance)
+
+func _create_muzzle_marker(local_offset := Vector3(-0.10, 0.03, 1.978)) -> void:
 	muzzle_marker = Marker3D.new()
 	muzzle_marker.name = "MuzzlePoint"
 	# Barrel tip in the rig's own space, computed from the skinned pose of the
 	# imported glTF (not from the unskinned bind AABB): the rifle mesh spans
 	# z = -0.779 .. +1.978 and the magazine sits at the negative-Z grip end, so
 	# +Z is the muzzle. Mounting the model 180 degrees maps that to camera -Z.
-	muzzle_marker.position = Vector3(-0.10, 0.03, 1.978)
+	muzzle_marker.position = local_offset
 	weapon_scene.add_child(muzzle_marker)
 
 func _create_muzzle_flash() -> void:

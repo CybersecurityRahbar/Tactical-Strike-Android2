@@ -372,5 +372,27 @@ func _run_smoke_test() -> void:
 		_fail("head hits are not more damaging than body hits.")
 		return
 
+	# ---- Complete seven-weapon loadout ------------------------------------
+	# Runs last because switching weapons rebuilds the first-person view model
+	# and frees the AK rig the earlier checks hold a reference to.
+	var loadout: Array = weapon_controller.get("weapons")
+	if loadout.size() != 7:
+		_fail("expected the full 7-weapon loadout, got %d." % loadout.size())
+		return
+	for index in range(loadout.size()):
+		weapon_controller.call("select_weapon", index)
+		await process_frame
+		var active: Dictionary = loadout[index]
+		if int(weapon_controller.get("current_index")) != index:
+			_fail("could not switch to weapon %d (%s)." % [index, str(active.get("name", "?"))])
+			return
+		var view: Node3D = weapon_controller.get("view_model")
+		if view == null or view.get_child_count() == 0:
+			_fail("weapon %s has no first-person view model." % str(active.get("name", "?")))
+			return
+		if view.find_children("MuzzlePoint", "Marker3D", true, false).is_empty():
+			_fail("weapon %s has no muzzle marker." % str(active.get("name", "?")))
+			return
+
 	print("SMOKE TEST PASSED: rocky/plain terrain with triplanar cliffs, forward-mounted AK-74M muzzle, hit-zoned defenders, real drag/gravity ballistics, single-shot reports, tracer streaks, surface impacts with sparks and audio, mobile input, firing, ADS and reload.")
 	quit(0)
