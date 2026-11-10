@@ -10,6 +10,19 @@ const WEAPON_CONTROLLER = preload("res://scripts/weapons/weapon_controller.gd")
 @export var mobile_look_multiplier := 1.12
 @export var ground_acceleration := 25.0
 @export var air_acceleration := 7.0
+@export var max_health := 130.0
+@export var max_stamina := 100.0
+
+var health := 130.0
+var stamina := 100.0
+var suppression := 0.0
+var is_sprinting := false
+var is_dead := false
+var stamina_delay := 0.0
+var damage_delay := 0.0
+var respawn_point := Vector3.ZERO
+var sway_time := 0.0
+var vitals_timer := 0.0
 
 var camera: Camera3D
 var weapon_controller: Node3D
@@ -39,7 +52,11 @@ func _ready() -> void:
 	_create_camera()
 	_create_weapon_controller()
 	_create_footstep_audio()
+	call_deferred("_capture_spawn_point")
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if _is_touch_device() else Input.MOUSE_MODE_CAPTURED
+
+func _capture_spawn_point() -> void:
+	respawn_point = global_position
 
 func _is_touch_device() -> bool:
 	return OS.get_name() == "Android" or OS.get_name() == "iOS"
@@ -107,6 +124,10 @@ func adjust_sensitivity(amount: float) -> void:
 		hud.set_message("LOOK SENSITIVITY: %.3f" % (mouse_sensitivity * 1000.0))
 
 func set_aim_enabled(enabled: bool) -> void:
+	# Shouldering a weapon out of a sprint takes a beat, as in Squad: you cannot
+	# snap into the sights while running at full speed.
+	if enabled and is_sprinting:
+		return
 	aim_enabled = enabled
 	if weapon_controller != null and weapon_controller.has_method("set_aiming"):
 		weapon_controller.call("set_aiming", aim_enabled)
@@ -196,7 +217,15 @@ func _physics_process(delta: float) -> void:
 	var local_direction := Vector3(input_vector.x, 0.0, input_vector.y)
 	var direction := (global_transform.basis * local_direction).normalized()
 	var moving := input_vector.length() > 0.08
-	var sprinting := moving and Input.is_action_pressed("sprint") and not is_crouched
+	var sprinting := moving and Input.is_action_pressed("sprint") and not is_crouched and stamina > 2.0 and not aim_enabled and not is_dead
+	is_sprinting = sprinting
+	if sprinting:
+		stamina = maxf(0.0, stamina - 17.0 * delta)
+		stamina_delay = 1.2
+	else:
+		stamina_delay = maxf(0.0, stamina_delay - delta)
+		if stamina_delay <= 0.0:
+			stamina = minf(max_stamina, stamina + (7.0 if is_crouched else 13.0) * delta)
 	var speed := sprint_speed if sprinting else walk_speed
 	if is_crouched:
 		speed = crouch_speed
@@ -223,14 +252,84 @@ func _physics_process(delta: float) -> void:
 
 func _process(delta: float) -> void:
 	camera_kick = move_toward(camera_kick, 0.0, delta * 2.4)
+	suppression = move_toward(suppression, 0.0, delta * 0.55)
+	sway_time += delta
+	if damage_delay > 0.0:
+		damage_delay = maxf(0.0, damage_delay - delta)
+	elif health < max_health and not is_dead:
+		health = minf(max_health, health + 3.5 * delta)
 	if camera != null:
-		camera.rotation.x = pitch + camera_kick
+		# Aim sway: a shouldered rifle never sits perfectly still, and incoming
+		# fire makes the sight picture wander. This is what makes long-range
+		# shooting in Squad feel deliberate instead of laser-accurate.
+		var sway := 0.0
+		var roll := 0.0
+		if aim_enabled and not is_dead:
+			var amplitude := 0.0024 + suppression * 0.011
+			if is_crouched:
+				amplitude *= 0.62
+			sway = sin(sway_time * 1.7) * amplitude + sin(sway_time * 0.83) * amplitude * 0.7
+			roll = sin(sway_time * 1.05) * amplitude * 1.6
+		camera.rotation.x = pitch + camera_kick + sway
+		camera.rotation.z = lerpf(camera.rotation.z, roll, clampf(delta * 6.0, 0.0, 1.0))
 		# The weapon controller owns the zoom while a weapon is equipped; this
 		# fallback keeps ADS working in a build without imported assets.
 		var weapon_list = weapon_controller.get("weapons") if weapon_controller != null else null
 		var weapon_ready: bool = weapon_list is Array and not weapon_list.is_empty()
 		if not weapon_ready:
 			camera.fov = lerpf(camera.fov, 57.0 if aim_enabled else 78.0, clampf(delta * 9.0, 0.0, 1.0))
+	vitals_timer -= delta
+	if vitals_timer <= 0.0 and hud != null and hud.has_method("set_vitals"):
+		vitals_timer = 0.15
+		hud.call("set_vitals", health, max_health, stamina, max_stamina)
+
+# --- Taking damage --------------------------------------------------------
+
+func is_alive_player() -> bool:
+	return not is_dead
+
+func chest_position() -> Vector3:
+	return global_position + Vector3.UP * 1.25
+
+func apply_ballistic_damage_at(damage: float, _penetration: float, _caliber: String, _point: Vector3, _normal: Vector3, shape_index: int) -> void:
+	take_damage(damage * (2.2 if shape_index == 1 else 1.0))
+
+func apply_ballistic_damage(damage: float, _penetration: float, _caliber: String) -> void:
+	take_damage(damage)
+
+func take_damage(amount: float) -> void:
+	if is_dead or amount <= 0.0:
+		return
+	health = maxf(0.0, health - amount)
+	damage_delay = 6.0
+	suppression = clampf(suppression + 0.45, 0.0, 1.0)
+	if hud != null:
+		hud.set_message("TAKING FIRE")
+	if health <= 0.0:
+		_die_player()
+
+func add_suppression(amount: float) -> void:
+	suppression = clampf(suppression + amount, 0.0, 1.0)
+
+func _die_player() -> void:
+	is_dead = true
+	set_aim_enabled(false)
+	if hud != null:
+		hud.set_message("KILLED IN ACTION — RESPAWNING")
+	var timer := get_tree().create_timer(4.0)
+	timer.timeout.connect(_respawn_player)
+
+func _respawn_player() -> void:
+	if not is_inside_tree():
+		return
+	global_position = respawn_point + Vector3(randf_range(-3.0, 3.0), 0.2, randf_range(-2.0, 2.0))
+	velocity = Vector3.ZERO
+	health = max_health
+	stamina = max_stamina
+	suppression = 0.0
+	is_dead = false
+	if hud != null:
+		hud.set_message("REDEPLOYED")
 
 func _update_camera_motion(delta: float, moving: bool, sprinting: bool) -> void:
 	var base_height := 1.08 if is_crouched else 1.62

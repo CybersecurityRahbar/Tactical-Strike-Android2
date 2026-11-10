@@ -149,6 +149,9 @@ func _process(delta: float) -> void:
 			bob = Vector3.ZERO
 		var look_sway := Vector3(clampf(-look_delta.x * 0.00035, -0.02, 0.02), clampf(look_delta.y * 0.0003, -0.02, 0.02), 0.0)
 		var target_position := view_model_base.lerp(view_model_ads, aim_blend)
+		# Sprinting drops the rifle to the chest, like Squad's run pose.
+		if movement_state == "run":
+			target_position += Vector3(0.02, -0.13, -0.05)
 		view_model.position = target_position + breathe + bob + look_sway + Vector3(recoil_side * 0.35, recoil_amount * 0.12, recoil_amount)
 		view_model.rotation.x = -recoil_amount * 0.36
 		view_model.rotation.y = recoil_side * 0.10
@@ -229,6 +232,8 @@ func _muzzle_world_position() -> Vector3:
 	return camera.global_position + basis * Vector3(0.22, -0.16, -0.48)
 
 func _try_fire() -> void:
+	if movement_state == "run":
+		return
 	if weapons.is_empty() or is_reloading or fire_cooldown > 0.0:
 		return
 	if magazine_ammo <= 0:
@@ -267,6 +272,11 @@ func _try_fire() -> void:
 	# Dispersion is an angular cone around the camera axis; it tightens when
 	# aiming down the sights and opens up during a long burst.
 	var spread_deg := lerpf(float(weapon.get("spread_hip_deg", 0.55)), float(weapon.get("spread_ads_deg", 0.12)), aim_blend) * burst_factor
+	# Being under fire opens the cone: suppression is a real mechanic, not a filter.
+	if is_instance_valid(shooter):
+		var suppression: float = float(shooter.get("suppression"))
+		if suppression > 0.0:
+			spread_deg *= 1.0 + suppression * 1.3
 	var angle := deg_to_rad(spread_deg) * sqrt(randf())
 	var roll := randf() * TAU
 	var shot_direction := (forward

@@ -230,6 +230,12 @@ func _apply_impact(hit: Dictionary) -> void:
 
 	var caliber_name := str(weapon_stats.get("caliber", caliber.get("name", "")))
 
+	# Friendly fire stays off between AI soldiers of the same side.
+	if collider is Node and (collider as Node).is_in_group("soldier") and is_instance_valid(shooter) and shooter.has_method("is_alive_soldier") and str(collider.get("faction")) == str(shooter.get("faction")):
+		IMPACT_FX.spawn_impact(get_tree().current_scene, point, normal, surface, BALLISTICS.energy_j(caliber, speed), caliber, false)
+		queue_free()
+		return
+
 	# Forward damage/penetration callbacks if the target has the method.
 	if collider != null and collider.has_method("apply_ballistic_damage_at"):
 		collider.call("apply_ballistic_damage_at", damage, penetration, caliber_name, point, normal, int(hit.get("shape", -1)))
@@ -297,3 +303,5 @@ func _check_bullet_whiz() -> void:
 
 	whiz_played = true
 	IMPACT_AUDIO.play_crack(get_tree().current_scene, global_position, caliber, BALLISTICS.crack_strength(caliber, speed))
+	if player.has_method("add_suppression"):
+		player.call("add_suppression", 0.4)

@@ -15,6 +15,7 @@ var root: Control
 var status_label: Label
 var weapon_label: Label
 var message_label: Label
+var vitals_label: Label
 var message_timer := 0.0
 var pause_panel: PanelContainer
 var settings_panel: PanelContainer
@@ -97,6 +98,12 @@ func _create_header() -> void:
 	weapon_label.add_theme_font_size_override("font_size", 14)
 	weapon_label.add_theme_color_override("font_color", Color(0.93, 0.72, 0.42))
 	column.add_child(weapon_label)
+	vitals_label = Label.new()
+	vitals_label.name = "Vitals"
+	vitals_label.text = "HP 130/130   STAMINA 100"
+	vitals_label.add_theme_font_size_override("font_size", 13)
+	vitals_label.add_theme_color_override("font_color", Color(0.66, 0.84, 0.60))
+	column.add_child(vitals_label)
 	message_label = Label.new()
 	message_label.name = "CombatMessage"
 	message_label.add_theme_font_size_override("font_size", 14)
@@ -338,6 +345,18 @@ func set_battle_status(value: String) -> void:
 func set_weapon_info(name: String, caliber: String, ammo: int, capacity: int, reserve: int, ammo_type: String, mode: String) -> void:
 	if weapon_label != null:
 		weapon_label.text = "%s  |  %s  |  %02d/%02d  |  RES %03d  |  %s  |  %s" % [name, caliber, ammo, capacity, reserve, ammo_type, mode]
+
+func set_vitals(health: float, max_health: float, stamina: float, max_stamina: float) -> void:
+	if vitals_label == null:
+		return
+	var health_ratio := clampf(health / maxf(max_health, 1.0), 0.0, 1.0)
+	var state := ""
+	if health_ratio < 0.34:
+		state = "  CRITICAL"
+	elif health_ratio < 0.66:
+		state = "  WOUNDED"
+	vitals_label.text = "HP %03d/%03d   STAMINA %03d%s" % [int(round(health)), int(round(max_health)), int(round(stamina)), state]
+	vitals_label.add_theme_color_override("font_color", Color(0.85, 0.32, 0.26) if health_ratio < 0.34 else Color(0.66, 0.84, 0.60))
 
 func set_message(value: String) -> void:
 	if message_label != null:
