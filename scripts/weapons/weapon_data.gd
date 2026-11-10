@@ -160,8 +160,8 @@ static func all_weapons() -> Array[Dictionary]:
 			"recoil_view": 0.200,
 			"spread_hip_deg": 2.00,
 			"spread_ads_deg": 0.50,
-			"view_rotation_degrees": Vector3(0.0, 0.0, 0.0),
-			"view_scale": 0.65,
+			"view_rotation_degrees": Vector3(0.0, 180.0, 0.0),
+			"view_scale": 0.58,
 			"view_hip_position": Vector3(0.10, -0.10, -0.30),
 			"view_ads_position": Vector3(0.05, -0.05, -0.20),
 			"tracer_ignition_distance": 0.0

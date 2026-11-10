@@ -16,6 +16,8 @@ const IMPACT_FX = preload("res://scripts/effects/impact_fx.gd")
 const IMPACT_AUDIO = preload("res://scripts/effects/impact_audio.gd")
 const BALLISTICS = preload("res://scripts/weapons/ballistics.gd")
 const SOLDIER = preload("res://scripts/world/soldier_visuals.gd")
+const TRACER = preload("res://scripts/effects/tracer_visual.gd")
+const WEAPON_AUDIO = preload("res://scripts/effects/weapon_audio.gd")
 
 @export var faction := "militia"
 @export var max_health := 120.0
@@ -51,6 +53,7 @@ var _detour_timer := 0.0
 var _detour_side := 1.0
 var _rig_scale := 1.0
 var _weapon_stats := {}
+var _shots_fired := 0
 
 func _ready() -> void:
 	add_to_group("combat_target")
@@ -301,8 +304,15 @@ func _fire_round() -> void:
 	if not hit.is_empty():
 		end = hit.get("position")
 		collider = hit.get("collider")
-	_spawn_tracer(origin, end)
+	_shots_fired += 1
+	# Most rounds are ball; every third round is a tracer, so the player sees
+	# rounds burning across the field without every burst looking like lasers.
+	if _shots_fired % 3 == 0:
+		_spawn_tracer(origin, end)
 	_muzzle_flash_timer = 0.05
+	if scene_audio() != null:
+		var report_profile := "ak" if faction == "militia" else "m4"
+		WEAPON_AUDIO.play_fire(scene_audio(), origin, report_profile, -2.0)
 	if collider != null:
 		var surface := "dirt"
 		if collider.has_meta("surface"):
@@ -318,6 +328,10 @@ func _fire_round() -> void:
 	_suppress_player(origin, end)
 	if get_tree().current_scene != null:
 		IMPACT_AUDIO.play_crack(get_tree().current_scene, end, BALLISTICS.profile("5.45x39"), 0.8)
+
+func scene_audio() -> Node:
+	var scene := get_tree().current_scene
+	return scene if scene != null else null
 
 func _player_position() -> Vector3:
 	var player := get_tree().get_first_node_in_group("player")
@@ -341,29 +355,8 @@ func _spawn_tracer(from: Vector3, to: Vector3) -> void:
 	var scene := get_tree().current_scene
 	if scene == null:
 		return
-	var length := from.distance_to(to)
-	if length < 4.0:
-		return
-	var tracer := MeshInstance3D.new()
-	tracer.name = "BotTracer"
-	tracer.add_to_group("bot_tracer")
-	var mesh := BoxMesh.new()
-	mesh.size = Vector3(0.025, 0.025, length)
-	tracer.mesh = mesh
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	material.albedo_color = Color(1.0, 0.42, 0.16, 0.55 if faction == "militia" else 0.45)
-	tracer.material_override = material
-	tracer.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	scene.add_child(tracer)
-	tracer.global_position = (from + to) * 0.5
-	if from.distance_to(to) > 0.1:
-		tracer.look_at(to, Vector3.UP)
-	var tween := tracer.create_tween()
-	tween.tween_property(material, "albedo_color:a", 0.0, 0.14)
-	tween.tween_callback(tracer.queue_free)
+	# A real travelling round with a hot core and a spark trail, not a line.
+	TRACER.spawn_streak(scene, from, to, Color(1.0, 0.36, 0.12))
 
 func _move(delta: float) -> void:
 	var desired := Vector3.ZERO

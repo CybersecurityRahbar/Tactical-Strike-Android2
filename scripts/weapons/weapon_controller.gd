@@ -4,6 +4,7 @@ const WEAPON_DATA = preload("res://scripts/weapons/weapon_data.gd")
 const PROJECTILE = preload("res://scripts/weapons/projectile.gd")
 const WEAPON_AUDIO = preload("res://scripts/effects/weapon_audio.gd")
 const BALLISTICS = preload("res://scripts/weapons/ballistics.gd")
+const VIEW_MODELS = preload("res://scripts/weapons/view_models.gd")
 
 const IDLE_ANIM := "Rig|AK_Idle"
 const DRAW_ANIM := "Rig|AK_Draw"
@@ -37,6 +38,7 @@ var weapon_reserves: Array[int] = []
 var muzzle_marker: Marker3D
 var muzzle_flash: Node3D
 var muzzle_flash_timer: Timer
+var muzzle_smoke: CPUParticles3D
 var animation_player: AnimationPlayer
 var action_animation_active := false
 var recoil_amount := 0.0
@@ -341,7 +343,7 @@ func _build_weapon_view_model() -> void:
 	if packed == null:
 		# No imported rig for this weapon: build a stand-in silhouette so the
 		# weapon is still visible, aimable and fully playable.
-		_build_procedural_view_model(spec)
+		_build_detailed_view_model(spec)
 		return
 	weapon_scene = packed.instantiate() as Node3D
 	if weapon_scene == null:
@@ -373,98 +375,22 @@ func _build_weapon_view_model() -> void:
 	_play_action_animation(DRAW_ANIM)
 	_update_hud()
 
-# Silhouette dimensions for weapons that have no imported rig. Values are in
-# the rig's own space where +Z points down the bore (the mount transform then
-# turns that towards the camera's -Z forward axis).
-const PROC_GEOMETRY := {
-	"ak74m": {"barrel": 1.00, "radius": 0.020, "optic": 0.0, "tube": 0.0, "wood": true},
-	"m4a1": {"barrel": 0.90, "radius": 0.018, "optic": 0.0, "tube": 0.0, "wood": false},
-	"pkm": {"barrel": 1.12, "radius": 0.024, "optic": 0.0, "tube": 0.0, "wood": true},
-	"rpg7": {"barrel": 1.25, "radius": 0.042, "optic": 0.12, "tube": 0.075, "wood": true},
-	"dragunov": {"barrel": 1.22, "radius": 0.020, "optic": 0.20, "tube": 0.0, "wood": true},
-	"50cal": {"barrel": 1.40, "radius": 0.032, "optic": 0.22, "tube": 0.0, "wood": false},
-	"dushka": {"barrel": 1.32, "radius": 0.034, "optic": 0.16, "tube": 0.0, "wood": false},
-}
-
-func _build_procedural_view_model(spec: Dictionary) -> void:
+# Weapons without an imported rig get a detailed model built from parts plus
+# first-person arms, so every gun in the loadout has a real silhouette.
+func _build_detailed_view_model(spec: Dictionary) -> void:
 	if view_model == null:
 		return
 	var wid := str(spec.get("id", ""))
-	var geometry: Dictionary = PROC_GEOMETRY.get(wid, {"barrel": 1.0, "radius": 0.020, "optic": 0.0, "tube": 0.0, "wood": false})
 	weapon_scene = Node3D.new()
-	weapon_scene.name = wid + "_Procedural"
+	weapon_scene.name = wid + "_ArmsAndWeapon"
 	weapon_scene.rotation_degrees = spec.get("view_rotation_degrees", Vector3(0.0, 180.0, 0.0))
 	weapon_scene.scale = Vector3.ONE * float(spec.get("view_scale", 0.46))
 	view_model.add_child(weapon_scene)
-
-	var metal := _proc_material(Color(0.14, 0.145, 0.155), 0.70, 0.38)
-	var furniture := _proc_material(Color(0.33, 0.22, 0.12) if bool(geometry.get("wood", false)) else Color(0.10, 0.10, 0.11), 0.15, 0.72)
-
-	var barrel_len := float(geometry.get("barrel", 1.0))
-	var radius := float(geometry.get("radius", 0.020))
-	var tube_radius := float(geometry.get("tube", 0.0))
-
-	if tube_radius > 0.0:
-		# Launcher: one fat tube with a cone warhead at the muzzle end.
-		_add_proc_cylinder(weapon_scene, tube_radius, barrel_len * 1.05, Vector3(0.0, 0.0, barrel_len * 0.45), metal)
-		var cone := CylinderMesh.new()
-		cone.top_radius = 0.0
-		cone.bottom_radius = tube_radius * 1.25
-		cone.height = 0.24
-		var cone_instance := MeshInstance3D.new()
-		cone_instance.mesh = cone
-		cone_instance.material_override = _proc_material(Color(0.30, 0.28, 0.20), 0.4, 0.5)
-		cone_instance.position = Vector3(0.0, 0.0, barrel_len * 1.02)
-		cone_instance.rotation_degrees = Vector3(90.0, 0.0, 0.0)
-		cone_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		weapon_scene.add_child(cone_instance)
-		_add_proc_box(weapon_scene, Vector3(0.05, 0.14, 0.06), Vector3(0.0, -0.10, 0.06), furniture)
-	else:
-		_add_proc_cylinder(weapon_scene, radius, barrel_len * 0.9, Vector3(0.0, 0.03, barrel_len * 0.45), metal)
-		_add_proc_box(weapon_scene, Vector3(0.086, 0.118, 0.56), Vector3(0.0, 0.0, 0.02), furniture)
-		_add_proc_box(weapon_scene, Vector3(0.055, 0.095, 0.30), Vector3(0.0, -0.004, -0.40), furniture)
-		_add_proc_box(weapon_scene, Vector3(0.052, 0.215, 0.10), Vector3(0.0, -0.145, 0.06), metal)
-		_add_proc_box(weapon_scene, Vector3(0.045, 0.14, 0.06), Vector3(0.0, -0.125, -0.12), furniture)
-		_add_proc_box(weapon_scene, Vector3(0.048, 0.032, 0.22), Vector3(0.0, 0.072, 0.30), furniture)
-
-	var optic_height := float(geometry.get("optic", 0.0))
-	if optic_height > 0.0:
-		_add_proc_cylinder(weapon_scene, 0.034, 0.30, Vector3(0.0, 0.085 + optic_height * 0.4, 0.08), metal)
-		_add_proc_box(weapon_scene, Vector3(0.048, optic_height * 0.55, 0.16), Vector3(0.0, 0.07 + optic_height * 0.22, 0.08), metal)
-
-	_create_muzzle_marker(Vector3(0.0, 0.03, barrel_len * (1.06 if tube_radius > 0.0 else 0.9)))
+	var built: Dictionary = VIEW_MODELS.build(spec, weapon_scene)
+	var muzzle_z := float(built.get("muzzle_z", 0.85))
+	_create_muzzle_marker(Vector3(0.0, 0.012, muzzle_z))
 	_create_muzzle_flash()
 	_update_hud()
-
-func _proc_material(color: Color, metallic: float, roughness: float) -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.albedo_color = color
-	material.metallic = metallic
-	material.roughness = roughness
-	return material
-
-func _add_proc_box(parent: Node3D, size: Vector3, at: Vector3, material: Material) -> void:
-	var mesh := BoxMesh.new()
-	mesh.size = size
-	var instance := MeshInstance3D.new()
-	instance.mesh = mesh
-	instance.material_override = material
-	instance.position = at
-	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	parent.add_child(instance)
-
-func _add_proc_cylinder(parent: Node3D, cylinder_radius: float, length: float, at: Vector3, material: Material) -> void:
-	var mesh := CylinderMesh.new()
-	mesh.top_radius = cylinder_radius
-	mesh.bottom_radius = cylinder_radius
-	mesh.height = length
-	var instance := MeshInstance3D.new()
-	instance.mesh = mesh
-	instance.material_override = material
-	instance.position = at
-	instance.rotation_degrees = Vector3(90.0, 0.0, 0.0)
-	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	parent.add_child(instance)
 
 func _create_muzzle_marker(local_offset := Vector3(-0.10, 0.03, 1.978)) -> void:
 	muzzle_marker = Marker3D.new()
@@ -500,19 +426,66 @@ func _create_muzzle_flash() -> void:
 		petal.rotation.z = float(i) * (TAU / 3.0)
 		petal.position.z = -0.02 * float(i)
 		muzzle_flash.add_child(petal)
+	# A bright four-point star over the petals reads as a real muzzle flash
+	# rather than a glowing ball.
+	for i in range(2):
+		var spike := MeshInstance3D.new()
+		var spike_quad := QuadMesh.new()
+		spike_quad.size = Vector2(0.62, 0.055)
+		spike.mesh = spike_quad
+		spike.material_override = flash_material
+		spike.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		spike.rotation.z = float(i) * (PI * 0.5)
+		muzzle_flash.add_child(spike)
 	# No dynamic muzzle light: toggling an OmniLight at 600 rpm forces a light
 	# list update every shot and can hitch on mobile. The additive petals plus
 	# the environment glow carry the flash instead.
 	camera.add_child(muzzle_flash)
+	_build_muzzle_smoke()
 	muzzle_flash_timer = Timer.new()
 	muzzle_flash_timer.one_shot = true
 	muzzle_flash_timer.wait_time = 0.055
 	muzzle_flash_timer.timeout.connect(_hide_muzzle_flash)
 	add_child(muzzle_flash_timer)
 
+# Powder smoke drifting off the muzzle after each shot.
+func _build_muzzle_smoke() -> void:
+	if muzzle_marker == null:
+		return
+	muzzle_smoke = CPUParticles3D.new()
+	muzzle_smoke.name = "MuzzleSmoke"
+	muzzle_smoke.one_shot = true
+	muzzle_smoke.emitting = false
+	muzzle_smoke.amount = 7
+	muzzle_smoke.lifetime = 0.55
+	muzzle_smoke.explosiveness = 0.95
+	muzzle_smoke.direction = Vector3(0.0, 0.25, 1.0)
+	muzzle_smoke.spread = 20.0
+	muzzle_smoke.initial_velocity_min = 0.6
+	muzzle_smoke.initial_velocity_max = 1.6
+	muzzle_smoke.gravity = Vector3(0.0, 0.5, 0.0)
+	muzzle_smoke.scale_amount_min = 0.5
+	muzzle_smoke.scale_amount_max = 1.2
+	var puff_mesh := SphereMesh.new()
+	puff_mesh.radius = 0.035
+	puff_mesh.height = 0.07
+	puff_mesh.radial_segments = 5
+	puff_mesh.rings = 2
+	muzzle_smoke.mesh = puff_mesh
+	var smoke_material := StandardMaterial3D.new()
+	smoke_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	smoke_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	smoke_material.albedo_color = Color(0.72, 0.71, 0.68, 0.30)
+	smoke_material.vertex_color_use_as_albedo = true
+	muzzle_smoke.material_override = smoke_material
+	muzzle_smoke.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	muzzle_marker.add_child(muzzle_smoke)
+
 func _show_muzzle_flash(_world_position: Vector3, direction: Vector3) -> void:
 	if muzzle_flash == null or muzzle_marker == null:
 		return
+	if is_instance_valid(muzzle_smoke):
+		muzzle_smoke.restart()
 	muzzle_flash.global_position = muzzle_marker.global_position
 	var up := Vector3.UP
 	if absf(direction.dot(Vector3.UP)) > 0.98:

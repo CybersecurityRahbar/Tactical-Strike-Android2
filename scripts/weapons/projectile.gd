@@ -14,6 +14,7 @@ extends Node3D
 const IMPACT_FX = preload("res://scripts/effects/impact_fx.gd")
 const IMPACT_AUDIO = preload("res://scripts/effects/impact_audio.gd")
 const BALLISTICS = preload("res://scripts/weapons/ballistics.gd")
+const TRACER = preload("res://scripts/effects/tracer_visual.gd")
 
 # --- Bullet state ---
 
@@ -22,6 +23,7 @@ var weapon_stats: Dictionary = {}
 var caliber: Dictionary = {}
 var shooter: Node3D
 var tracer_visual: MeshInstance3D
+var tracer_round: Dictionary = {}
 var tracer_enabled := false
 var tracer_ignition_distance := 22.0
 var travelled_distance := 0.0
@@ -53,34 +55,12 @@ func setup(start_position: Vector3, initial_velocity: Vector3, stats: Dictionary
 # --- Tracer visual ---
 
 func _create_tracer_visual() -> void:
-	tracer_visual = MeshInstance3D.new()
-	tracer_visual.name = "TracerStreak"
-
-	# A short, thin segment with a bright core. The earlier multi-metre box
-	# read as a continuous red laser; this reads as a moving tracer round.
-	var streak := CylinderMesh.new()
-	streak.top_radius = 0.007
-	streak.bottom_radius = 0.004
-	streak.height = 1.0
-	streak.radial_segments = 5
-	streak.rings = 1
-	tracer_visual.mesh = streak
-
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-
+	# A tracer is a burning round: hot white core, orange halo and a short
+	# spark trail that lags behind in world space. No laser line.
 	var tracer_color: Color = caliber.get("tracer_color", Color(1.0, 0.30, 0.10))
-	material.albedo_color = Color(tracer_color.r, tracer_color.g, tracer_color.b, 0.85)
-	material.emission_enabled = true
-	material.emission = tracer_color
-	material.emission_energy_multiplier = 2.6
-	material.no_depth_test = false
-
-	tracer_visual.material_override = material
-	tracer_visual.visible = false
-	add_child(tracer_visual)
+	tracer_round = TRACER.build_round(self, tracer_color)
+	tracer_visual = tracer_round.get("core") as MeshInstance3D
+	TRACER.set_visible(tracer_round, false)
 
 # --- Physics process ---
 
@@ -138,35 +118,31 @@ func _physics_process(delta: float) -> void:
 # --- Tracer update ---
 
 func _update_tracer(delta: float, speed: float) -> void:
-	if tracer_visual == null:
+	if tracer_round.is_empty():
+		return
+	var root := tracer_round.get("root") as Node3D
+	if root == null:
 		return
 
-	if not tracer_visual.visible:
+	if not root.visible:
 		# Tracer only ignites after the designated distance.
 		if travelled_distance < tracer_ignition_distance:
 			return
-		tracer_visual.visible = true
+		TRACER.set_visible(tracer_round, true)
 
-	var direction := velocity.normalized()
-	if direction.is_zero_approx():
-		return
-
-	# Streak length capped so a fast round never becomes a laser.
-	# The length shrinks with distance so it feels like a trailing effect.
-	var streak_length := clampf(speed * delta * 0.55, 0.35, 2.1)
-
-	# Make the tracer glow brighter when the round is supersonic.
-	var is_supersonic := speed > BALLISTICS.SPEED_OF_SOUND_MPS
-	var color_mod := 1.5 if is_supersonic else 1.0
-	var tracer_color: Color = caliber.get("tracer_color", Color(1.0, 0.30, 0.10))
-	tracer_visual.material_override.emission = tracer_color * color_mod
-
-	tracer_visual.global_transform = Transform3D(
-		Basis.looking_at(direction, Vector3.UP),
-		global_position - direction * streak_length * 0.5
-	)
-	tracer_visual.rotate_object_local(Vector3.RIGHT, -PI * 0.5)
-	tracer_visual.scale = Vector3(1.0, streak_length, 1.0)
+	# Faster rounds burn brighter and leave a wider halo; the flicker keeps a
+	# stream of tracers from looking like identical sprites.
+	var speed_factor := clampf(speed / 950.0, 0.55, 1.5)
+	var flicker := 0.88 + sin(alive_time * 62.0) * 0.12
+	var outer := tracer_round.get("outer") as MeshInstance3D
+	if outer != null:
+		outer.scale = Vector3.ONE * speed_factor * (1.0 + sin(alive_time * 41.0) * 0.10)
+	var outer_material := tracer_round.get("outer_material") as StandardMaterial3D
+	if outer_material != null:
+		outer_material.albedo_color.a = clampf(0.26 * speed_factor * flicker, 0.1, 0.55)
+	var halo := tracer_round.get("halo") as MeshInstance3D
+	if halo != null:
+		halo.scale = Vector3.ONE * clampf(speed_factor * flicker, 0.6, 1.4)
 
 # --- Surface detection ---
 

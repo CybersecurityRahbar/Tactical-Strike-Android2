@@ -94,6 +94,10 @@ jobs:
         run: |
           "$GODOT_BIN" --headless --path . --script res://tests/battle_test.gd
 
+      - name: Run headless content test
+        run: |
+          "$GODOT_BIN" --headless --path . --script res://tests/content_test.gd
+
       - name: Export Android debug APK
         run: |
           mkdir -p build

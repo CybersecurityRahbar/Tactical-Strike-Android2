@@ -321,11 +321,15 @@ func _run_smoke_test() -> void:
 	var tracer_projectiles := instance.get_tree().get_nodes_in_group("ballistic_projectiles")
 	var tracer_projectile = tracer_projectiles[tracer_projectiles.size() - 1]
 	var tracer_visual = tracer_projectile.get("tracer_visual")
-	if tracer_visual == null or not (tracer_visual.mesh is CylinderMesh):
-		_fail("tracer projectile has no compact streak mesh.")
+	if tracer_visual == null or not (tracer_visual.mesh is SphereMesh):
+		_fail("tracer projectile has no burning core mesh.")
 		return
-	if tracer_visual.scale.y > 2.4:
-		_fail("tracer streak is too long and reads as a laser line (%.2f m)." % tracer_visual.scale.y)
+	var tracer_round: Dictionary = tracer_projectile.get("tracer_round")
+	if tracer_round.is_empty():
+		_fail("tracer projectile did not build its tracer round.")
+		return
+	if tracer_round.get("halo") == null or tracer_round.get("trail") == null:
+		_fail("tracer round is missing its halo or spark trail.")
 		return
 
 	# ---- Reload ------------------------------------------------------------
