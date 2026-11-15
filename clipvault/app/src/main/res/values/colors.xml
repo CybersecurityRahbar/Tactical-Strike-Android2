@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg">#0B111B</color>
+    <color name="surface">#141C29</color>
+    <color name="surface_high">#1C2637</color>
+    <color name="accent">#4FA3FF</color>
+    <color name="text">#E6EEF9</color>
+    <color name="text_secondary">#8FA3BC</color>
+    <color name="ime_bg">#0E1420</color>
+    <color name="key">#1A2333</color>
+    <color name="key_pressed">#2B3A55</color>
+    <color name="launcher_bg">#0B111B</color>
+</resources>

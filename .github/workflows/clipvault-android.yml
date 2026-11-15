@@ -1,0 +1,89 @@
+name: ClipVault Android
+
+on:
+  push:
+    branches: [clipvault-app]
+    paths:
+      - "clipvault/**"
+      - ".github/workflows/clipvault-android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Configure Android SDK
+        run: |
+          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
+          echo "/usr/local/lib/android/sdk/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "/usr/local/lib/android/sdk/platform-tools" >> "$GITHUB_PATH"
+
+      - name: Install Android SDK packages
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Restore shared signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.CLIPVAULT_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.CLIPVAULT_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.CLIPVAULT_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.CLIPVAULT_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_BASE64:-}" ]; then
+            echo "::warning::CLIPVAULT_KEYSTORE_BASE64 is not set. Building a fallback debug APK that cannot update an installed release build."
+            exit 0
+          fi
+          mkdir -p clipvault/keystore
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > clipvault/keystore/clipvault-signing.jks
+          {
+            echo "storeFile=keystore/clipvault-signing.jks"
+            echo "storePassword=$STORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > clipvault/keystore.properties
+
+      - name: Build APK
+        working-directory: clipvault
+        run: |
+          set -euo pipefail
+          if [ -f keystore.properties ]; then
+            ./gradlew :app:assembleRelease --no-daemon
+            APK=app/build/outputs/apk/release/app-release.apk
+          else
+            ./gradlew :app:assembleDebug --no-daemon
+            APK=app/build/outputs/apk/debug/app-debug.apk
+          fi
+          test -s "$APK"
+          cp "$APK" ClipVault.apk
+          sha256sum ClipVault.apk > ClipVault.apk.sha256
+          cat ClipVault.apk.sha256
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --print-certs ClipVault.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClipVault-Android
+          path: |
+            clipvault/ClipVault.apk
+            clipvault/ClipVault.apk.sha256
+          if-no-files-found: error
+          retention-days: 30

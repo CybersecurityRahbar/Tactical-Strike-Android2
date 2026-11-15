@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">خزانة النصوص</string>
+    <string name="ime_name">ClipVault — لوحة المفاتيح</string>
+    <string name="ime_subtype_latin">الإنجليزية</string>
+    <string name="ime_subtype_arabic">العربية</string>
+
+    <string name="search_hint">ابحث في كل ما نسخته…</string>
+    <string name="empty_title">لا توجد نصوص محفوظة بعد</string>
+    <string name="empty_body">انسخ أي نص من أي تطبيق وسيُحفظ هنا تلقائياً مع تاريخه ووقته.</string>
+
+    <string name="setup_title">التقاط تلقائي لكل نص تنسخه</string>
+    <string name="setup_body">أندرويد يمنع أي تطبيق في الخلفية من قراءة الحافظة. الطريقة التي تعمل بدون تغيير لوحة المفاتيح هي منح التطبيق خدمة إمكانية الوصول: عندها يقرأ الحافظة لحظة النسخ عبر نافذة تركيز شفافة بحجم 1 بكسل، ولا يسجّل شيئاً مما على الشاشة. البديل الأقوى والأسرع هو تعيين ClipVault لوحةَ مفاتيح افتراضية.</string>
+    <string name="setup_auto">تفعيل الالتقاط التلقائي</string>
+    <string name="setup_keyboard">استخدام لوحة المفاتيح</string>
+    <string name="setup_enable_ime">فعّل ClipVault في القائمة ثم اضغط الزر مرة أخرى</string>
+    <string name="setup_pick_ime">اختر ClipVault من القائمة</string>
+    <string name="accessibility_label">التقاط تلقائي للحافظة</string>
+    <string name="accessibility_summary">يسجّل كل نص تنسخه تلقائياً</string>
+    <string name="accessibility_description">تمنح هذه الخدمة خزانة النصوص قراءة الحافظة مباشرة بعد كل نسخ، لأن أندرويد 10 وما بعده يمنع التطبيقات في الخلفية من قراءة الحافظة. الخدمة تفتح نافذة تركيز شفافة بحجم 1 بكسل لجزء من الثانية وتغلقها فوراً، ولا تُخزّن أي محتوى من الشاشة ولا ترسله إلى أي مكان، والتطبيق لا يملك صلاحية الإنترنت أصلاً.</string>
+    <string name="accessibility_opened">ابحث عن «خزانة النصوص» في قائمة إمكانية الوصول وفعّلها، ثم ارجع</string>
+
+    <string name="status_accessibility">الالتقاط التلقائي يعمل (إمكانية الوصول) • %1$d نصاً محفوظاً</string>
+    <string name="status_keyboard">الالتقاط التلقائي يعمل (لوحة المفاتيح) • %1$d نصاً محفوظاً</string>
+    <string name="status_limited">الالتقاط محدود • %1$d نصاً محفوظاً — فعّل خيار الالتقاط التلقائي</string>
+    <string name="last_capture">آخر التقاط: %1$s</string>
+    <string name="never">لا يوجد بعد</string>
+    <string name="db_info">الحجم: %1$s</string>
+
+    <string name="menu_export">تصدير JSON</string>
+    <string name="menu_import">استيراد JSON</string>
+    <string name="menu_export_db">تصدير قاعدة البيانات (.db)</string>
+    <string name="menu_settings">الإعدادات</string>
+    <string name="menu_clear">مسح السجل</string>
+    <string name="menu_about">عن التطبيق وكيف يعمل</string>
+
+    <string name="copied">تم النسخ إلى الحافظة</string>
+    <string name="deleted">تم الحذف</string>
+    <string name="undo">تراجع</string>
+    <string name="share">مشاركة</string>
+    <string name="delete">حذف</string>
+    <string name="copy">نسخ</string>
+    <string name="pin">تثبيت</string>
+    <string name="unpin">إلغاء التثبيت</string>
+    <string name="pinned_badge">مثبّت</string>
+
+    <string name="confirm_clear_title">مسح السجل</string>
+    <string name="confirm_clear_body">سيُحذف كل النص غير المثبّت نهائياً. النصوص المثبّتة تبقى. لا يمكن التراجع بعد التأكيد.</string>
+    <string name="confirm">مسح</string>
+    <string name="cancel">إلغاء</string>
+
+    <string name="export_done">تم التصدير: %1$d نصاً</string>
+    <string name="export_failed">تعذّر التصدير</string>
+    <string name="export_db_done">تم تصدير قاعدة البيانات الكاملة</string>
+    <string name="import_done">تم الاستيراد: %1$d نصاً جديداً</string>
+    <string name="import_failed">تعذّر الاستيراد — تأكد أن الملف بصيغة JSON صادرة عن التطبيق</string>
+
+    <string name="ime_open_vault">الخزانة</string>
+    <string name="ime_paste">لصق</string>
+    <string name="ime_empty">لا نصوص محفوظة بعد — انسخ أول نص</string>
+    <string name="ime_latin">EN</string>
+    <string name="ime_arabic">أبج</string>
+
+    <string name="notif_channel">الالتقاط التلقائي</string>
+    <string name="notif_channel_desc">إشعار دائم يوضح أن الخزانة تسجّل ما تنسخه</string>
+    <string name="notif_title">خزانة النصوص تعمل</string>
+    <string name="notif_auto">الالتقاط التلقائي مفعّل • %1$d نصاً</string>
+    <string name="notif_blocked">فعّل الالتقاط التلقائي أو لوحة المفاتيح ليعمل في كل التطبيقات</string>
+    <string name="notif_open">فتح</string>
+
+    <string name="tile_label">حفظ الحافظة</string>
+    <string name="tile_saved">تم الحفظ في الخزانة</string>
+    <string name="tile_blocked">لم يُقرأ شيء — افتح التطبيق مرة واحدة أو فعّل لوحة المفاتيح</string>
+
+    <string name="settings_title">الإعدادات</string>
+    <string name="settings_auto">الالتقاط التلقائي في الخلفية</string>
+    <string name="settings_auto_desc">يفعّل الخدمة الدائمة التي تسجّل ما تنسخه.</string>
+    <string name="settings_ignore_short">تجاهل النصوص الأقصر من 3 أحرف</string>
+    <string name="settings_ignore_short_desc">يمنع حفظ الحروف المفردة الناتجة عن النسخ الخاطئ.</string>
+    <string name="settings_ime">لوحة المفاتيح</string>
+    <string name="settings_pick">اختيار لوحة المفاتيح الافتراضية</string>
+    <string name="settings_accessibility">التقاط إمكانية الوصول</string>
+    <string name="settings_accessibility_desc">يقرأ الحافظة عند كل نسخ دون تغيير لوحة المفاتيح. يحتاج تفعيلاً مرة واحدة من إعدادات النظام.</string>
+    <string name="settings_accessibility_on">الحالة: مفعّل</string>
+    <string name="settings_accessibility_off">الحالة: غير مفعّل</string>
+    <string name="settings_accessibility_open">فتح إعدادات إمكانية الوصول</string>
+    <string name="settings_how">كيف يعمل التطبيق</string>
+    <string name="settings_how_body">• كل نص تنسخه يُحفظ في قاعدة بيانات SQLite محلية بلا حد أقصى للعدد.\n• كل نص يحمل تاريخ نسخه: اليوم والتاريخ والساعة بالثواني.\n• التطبيق لا يطلب صلاحية الإنترنت إطلاقاً، فلا شيء يخرج من الجهاز.\n• التصدير ينتج ملف JSON كامل، ويمكن أيضاً تصدير ملف قاعدة البيانات .db نفسه ونسخه إلى حاسوبك.\n• ترتيب العرض: المثبّت أولاً ثم الأحدث نسخاً.\n\nالتقنية: منذ أندرويد 10 لا يستطيع أي تطبيق في الخلفية قراءة الحافظة. لذلك يعمل الالتقاط بإحدى طريقتين: خدمة إمكانية الوصول التي تفتح نافذة تركيز شفافة بحجم 1 بكسل عند لحظة النسخ وتقرأ الحافظة ثم تغلقها فوراً (وهي لا تسجّل ما على الشاشة)، أو تعيين التطبيق لوحةَ مفاتيح افتراضية فيصبح لحزمته وصول دائم. وفي كل الأحوال تعمل خدمة أمامية صغيرة للاحتياط.\n\nبعد تفعيل إحدى الطريقتين لا تحتاج إلى أي خطوة عند النسخ: انسخ من أي تطبيق وسيظهر النص في الخزانة بتاريخه.</string>
+
+    <string name="about_title">عن التطبيق</string>
+    <string name="about_body">خزانة النصوص — مدير حافظة دائم وبحث وتصدير.\n\nما يميّزه:\n• عدد غير محدود من النصوص، ولا يُحذف القديم أبداً.\n• تاريخ ووقت كل نسخ بالثواني.\n• بحث فوري في كل النصوص.\n• تثبيت النصوص المهمة في الأعلى.\n• تصدير JSON واستيراد، وتصدير قاعدة البيانات .db.\n• حفظ تلقائي من: خدمة الخلفية، لوحة المفاتيح، فتح التطبيق، زر الإعدادات السريعة، وقائمة المشاركة.\n\nلا إنترنت، لا إعلانات، لا حساب، ونسخة احتياطية عبر Google معطّلة عن قصد حتى لا تخرج كلمات المرور من جهازك.</string>
+
+    <string name="cd_search">بحث</string>
+    <string name="cd_pin">تثبيت</string>
+    <string name="cd_copy">نسخ</string>
+    <string name="cd_share">مشاركة</string>
+    <string name="cd_delete">حذف</string>
+    <string name="cd_more">المزيد</string>
+    <string name="back">رجوع</string>
+
+    <string name="error_generic">حدث خطأ</string>
+    <string name="saved_one">تم حفظ النص في الخزانة</string>
+</resources>
