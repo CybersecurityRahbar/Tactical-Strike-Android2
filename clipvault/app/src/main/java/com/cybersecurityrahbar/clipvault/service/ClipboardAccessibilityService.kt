@@ -10,6 +10,7 @@ import android.os.SystemClock
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
+import android.view.inputmethod.InputMethodManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.cybersecurityrahbar.clipvault.data.ClipStore
@@ -146,6 +147,11 @@ class ClipboardAccessibilityService : AccessibilityService() {
     }
 
     private fun isTextInputFocused(): Boolean {
+        // A visible keyboard is the strongest signal that the user is typing, and it does not
+        // depend on the accessibility tree being readable.
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as? InputMethodManager
+        if (imm?.isAcceptingText == true) return true
+
         val root: AccessibilityNodeInfo = rootInActiveWindow ?: return false
         val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return false
         return focused.isEditable || focused.className?.toString()?.contains("EditText") == true
